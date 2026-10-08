@@ -41,7 +41,7 @@ describe("Order Flow", () => {
     const { variant } = await setupCart(token, branch.id, 2);
 
     const initialInventory = await prisma.inventory.findFirst({
-      where: { product_variant_id: variant.id, branch_id: branch.id }
+      where: { product_variant_id: variant.id }
     });
 
     const res = await request
@@ -55,7 +55,7 @@ describe("Order Flow", () => {
 
     // Inventory decreases
     const postInventory = await prisma.inventory.findFirst({
-      where: { product_variant_id: variant.id, branch_id: branch.id }
+      where: { product_variant_id: variant.id }
     });
     expect(postInventory!.quantity).toBe(initialInventory!.quantity - 2);
 
@@ -86,7 +86,7 @@ describe("Order Flow", () => {
     
     // Manually reduce inventory to 1
     await prisma.inventory.updateMany({
-      where: { product_variant_id: variant.id, branch_id: branch.id },
+      where: { product_variant_id: variant.id },
       data: { quantity: 1 }
     });
 
@@ -109,7 +109,7 @@ describe("Order Flow", () => {
     expect(await prisma.cart_item.count()).toBe(initialCartItemCount);
 
     const postInventory = await prisma.inventory.findFirst({
-      where: { product_variant_id: variant.id, branch_id: branch.id }
+      where: { product_variant_id: variant.id }
     });
     expect(postInventory!.quantity).toBe(1); // not reduced further
   });
@@ -214,7 +214,7 @@ describe("Order Flow", () => {
 
     // Re-increment inventory check (should happen when CANCELLED)
     const inventory = await prisma.inventory.findFirst({
-      where: { product_variant_id: variant.id, branch_id: branch.id }
+      where: { product_variant_id: variant.id }
     });
     // initial 10 - 2 (order) + 2 (cancel) = 10
     expect(inventory!.quantity).toBe(10); 

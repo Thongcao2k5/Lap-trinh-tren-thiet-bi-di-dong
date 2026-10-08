@@ -97,10 +97,22 @@ export const createProductVariant = async (productId: bigint, price: number) => 
   });
 };
 
-export const createInventory = async (branchId: bigint, productVariantId: bigint, quantity: number) => {
-  return prisma.inventory.create({
-    data: {
-      branch_id: branchId,
+export const createInventory = async (arg1: bigint, arg2: bigint | number, arg3?: number) => {
+  let productVariantId: bigint;
+  let quantity: number;
+
+  if (typeof arg2 === "number") {
+    productVariantId = arg1;
+    quantity = arg2;
+  } else {
+    productVariantId = arg2;
+    quantity = arg3 ?? 0;
+  }
+
+  return prisma.inventory.upsert({
+    where: { product_variant_id: productVariantId },
+    update: { quantity },
+    create: {
       product_variant_id: productVariantId,
       quantity,
     },
