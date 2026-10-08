@@ -165,7 +165,7 @@ class _MainShellState extends State<MainShell> {
           kIconSize: 25,
           kBottomRadius: 24,
           bottomBarHeight: 66,
-          bottomBarWidth: 500,
+          bottomBarWidth: MediaQuery.sizeOf(context).width,
           durationInMilliSeconds: 350,
           topMargin: 7,
           circleMargin: 7,

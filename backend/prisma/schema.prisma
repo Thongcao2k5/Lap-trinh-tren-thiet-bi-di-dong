@@ -130,7 +130,6 @@ model branch {
   branch_service branch_service[]
   court          court[]
   customer_order customer_order[]
-  inventory      inventory[]
   news           news[]
 }
 
@@ -240,15 +239,10 @@ model customer_order {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model inventory {
   id                 BigInt          @id @default(autoincrement())
-  branch_id          BigInt
-  product_variant_id BigInt
+  product_variant_id BigInt          @unique
   quantity           Int             @default(0)
   updated_at         DateTime        @default(now()) @db.Timestamp(6)
-  branch             branch          @relation(fields: [branch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   product_variant    product_variant @relation(fields: [product_variant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([branch_id, product_variant_id])
-  @@index([branch_id], map: "ix_inventory_branch")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -327,7 +321,7 @@ model product_variant {
   image_url    String?      @db.VarChar(1000)
   is_active    Boolean      @default(true)
   cart_item    cart_item[]
-  inventory    inventory[]
+  inventory    inventory?
   order_item   order_item[]
   product      product      @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }

@@ -7,14 +7,9 @@ export const inventoryRouter = Router();
 
 type InventoryRow = {
   id: bigint;
-  branch_id: bigint;
   product_variant_id: bigint;
   quantity: number;
   updated_at: Date;
-  branch: {
-    id: bigint;
-    name: string;
-  };
   product_variant: {
     id: bigint;
     sku: string;
@@ -28,16 +23,9 @@ type InventoryRow = {
 
 const inventorySelect = {
   id: true,
-  branch_id: true,
   product_variant_id: true,
   quantity: true,
   updated_at: true,
-  branch: {
-    select: {
-      id: true,
-      name: true,
-    },
-  },
   product_variant: {
     select: {
       id: true,
@@ -77,14 +65,9 @@ const parseQuantity = (value: unknown) => {
 
 const toInventoryResponse = (inventory: InventoryRow) => ({
   id: inventory.id.toString(),
-  branchId: inventory.branch_id.toString(),
   productVariantId: inventory.product_variant_id.toString(),
   quantity: inventory.quantity,
   updatedAt: inventory.updated_at,
-  branch: {
-    id: inventory.branch.id.toString(),
-    name: inventory.branch.name,
-  },
   productVariant: {
     id: inventory.product_variant.id.toString(),
     sku: inventory.product_variant.sku,
@@ -95,18 +78,6 @@ const toInventoryResponse = (inventory: InventoryRow) => ({
     },
   },
 });
-
-const findActiveBranch = (id: bigint) => {
-  return prisma.branch.findFirst({
-    where: {
-      id,
-      status: "ACTIVE",
-    },
-    select: {
-      id: true,
-    },
-  });
-};
 
 const findActiveProductVariant = (id: bigint) => {
   return prisma.product_variant.findFirst({
@@ -125,30 +96,8 @@ const findActiveProductVariant = (id: bigint) => {
 
 inventoryRouter.get("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "STAFF"]), async (req, res, next) => {
   try {
-    const isInternalStaff = req.user!.role === "BRANCH_MANAGER" || req.user!.role === "STAFF";
-
-    if (isInternalStaff && !req.user!.branchId) {
-      res.status(403).json({
-        success: false,
-        message: "Forbidden: Staff has no assigned branch",
-      });
-      return;
-    }
-
-    const assignedBranchId = isInternalStaff ? BigInt(req.user!.branchId!) : null;
-    const branchIdQuery = req.query.branchId === undefined ? null : parseBodyBigIntId(req.query.branchId);
     const productVariantId =
       req.query.productVariantId === undefined ? null : parseBodyBigIntId(req.query.productVariantId);
-
-    if (req.query.branchId !== undefined && !branchIdQuery) {
-      res.status(400).json({
-        success: false,
-        message: "branchId is invalid",
-      });
-      return;
-    }
-
-    const branchId = isInternalStaff ? assignedBranchId : branchIdQuery;
 
     if (req.query.productVariantId !== undefined && !productVariantId) {
       res.status(400).json({
@@ -160,16 +109,12 @@ inventoryRouter.get("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "S
 
     const inventories = await prisma.inventory.findMany({
       where: {
-        branch: {
-          status: "ACTIVE",
-        },
         product_variant: {
           is_active: true,
           product: {
             is_active: true,
           },
         },
-        ...(branchId ? { branch_id: branchId } : {}),
         ...(productVariantId ? { product_variant_id: productVariantId } : {}),
       },
       orderBy: {
@@ -214,19 +159,6 @@ inventoryRouter.get("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER",
       return;
     }
 
-    const isInternalStaff = req.user!.role === "BRANCH_MANAGER" || req.user!.role === "STAFF";
-
-    if (isInternalStaff) {
-      if (!req.user!.branchId) {
-        res.status(403).json({ success: false, message: "Forbidden: Staff has no assigned branch" });
-        return;
-      }
-      if (inventory.branch_id.toString() !== req.user!.branchId) {
-        res.status(403).json({ success: false, message: "Forbidden: Inventory does not belong to your branch" });
-        return;
-      }
-    }
-
     res.json({
       success: true,
       data: {
@@ -240,40 +172,13 @@ inventoryRouter.get("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER",
 
 inventoryRouter.post("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]), async (req, res, next) => {
   try {
-    const isManager = req.user!.role === "BRANCH_MANAGER";
-    const branchIdInput = parseBodyBigIntId(req.body?.branchId);
-
-    if (isManager && !req.user!.branchId) {
-      res.status(403).json({ success: false, message: "Forbidden: Manager has no assigned branch" });
-      return;
-    }
-
-    const branchId = isManager ? BigInt(req.user!.branchId!) : branchIdInput;
     const productVariantId = parseBodyBigIntId(req.body?.productVariantId);
     const quantity = parseQuantity(req.body?.quantity);
 
-    if (!branchId || !productVariantId || quantity === null) {
+    if (!productVariantId || quantity === null) {
       res.status(400).json({
         success: false,
-        message: "branchId, productVariantId and quantity are required",
-      });
-      return;
-    }
-
-    if (!isManager && branchIdInput && req.body?.branchId !== undefined && !branchIdInput) {
-       res.status(400).json({
-         success: false,
-         message: "branchId is invalid",
-       });
-       return;
-    }
-
-    const branch = await findActiveBranch(branchId);
-
-    if (!branch) {
-      res.status(400).json({
-        success: false,
-        message: "branch not found",
+        message: "productVariantId and quantity are required",
       });
       return;
     }
@@ -290,10 +195,7 @@ inventoryRouter.post("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]),
 
     const existingInventory = await prisma.inventory.findUnique({
       where: {
-        branch_id_product_variant_id: {
-          branch_id: branchId,
-          product_variant_id: productVariantId,
-        },
+        product_variant_id: productVariantId,
       },
       select: {
         id: true,
@@ -310,7 +212,6 @@ inventoryRouter.post("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]),
 
     const inventory = await prisma.inventory.create({
       data: {
-        branch_id: branchId,
         product_variant_id: productVariantId,
         quantity,
         updated_at: new Date(),
@@ -356,7 +257,6 @@ inventoryRouter.patch("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER
       where: { id },
       select: {
         id: true,
-        branch_id: true,
       },
     });
 
@@ -366,19 +266,6 @@ inventoryRouter.patch("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER
         message: "inventory not found",
       });
       return;
-    }
-
-    const isManager = req.user!.role === "BRANCH_MANAGER";
-
-    if (isManager) {
-      if (!req.user!.branchId) {
-        res.status(403).json({ success: false, message: "Forbidden: Manager has no assigned branch" });
-        return;
-      }
-      if (existingInventory.branch_id.toString() !== req.user!.branchId) {
-        res.status(403).json({ success: false, message: "Forbidden: Inventory does not belong to your branch" });
-        return;
-      }
     }
 
     const inventory = await prisma.inventory.update({

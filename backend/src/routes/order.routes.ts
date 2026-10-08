@@ -131,10 +131,7 @@ orderRouter.post("/", requireAuth, requireRole("CUSTOMER"), async (req, res, nex
       cart.cart_item.map(async (item) => {
         const inventory = await prisma.inventory.findUnique({
           where: {
-            branch_id_product_variant_id: {
-              branch_id: branchId,
-              product_variant_id: item.product_variant_id,
-            },
+            product_variant_id: item.product_variant_id,
           },
         });
         return { item, inventory };
@@ -152,7 +149,7 @@ orderRouter.post("/", requireAuth, requireRole("CUSTOMER"), async (req, res, nex
       if (!inventory || inventory.quantity < item.quantity) {
         res.status(400).json({
           success: false,
-          message: `Not enough stock for ${item.product_variant.product.name} - ${item.product_variant.variant_name} at this branch`,
+          message: `Not enough stock for ${item.product_variant.product.name} - ${item.product_variant.variant_name}`,
         });
         return;
       }
@@ -191,7 +188,6 @@ orderRouter.post("/", requireAuth, requireRole("CUSTOMER"), async (req, res, nex
       for (const item of cart.cart_item) {
         const inventoryUpdate = await tx.inventory.updateMany({
           where: {
-            branch_id: branchId,
             product_variant_id: item.product_variant_id,
             quantity: {
               gte: item.quantity,
@@ -482,10 +478,7 @@ orderRouter.patch("/:id/status", requireAuth, requireRole(["ADMIN", "BRANCH_MANA
         for (const item of existingOrder.order_item) {
           await tx.inventory.update({
             where: {
-              branch_id_product_variant_id: {
-                branch_id: existingOrder.branch_id,
-                product_variant_id: item.product_variant_id,
-              },
+              product_variant_id: item.product_variant_id,
             },
             data: {
               quantity: {
