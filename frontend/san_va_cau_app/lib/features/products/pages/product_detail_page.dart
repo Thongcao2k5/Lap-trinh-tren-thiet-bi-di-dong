@@ -40,6 +40,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   bool _isFavorited = false;
   bool _isTogglingFavorite = false;
 
+  bool get _canAddToCart {
+    final variant = _selectedVariant;
+    return variant != null &&
+        variant.isActive &&
+        variant.stockQuantity > 0 &&
+        _quantity >= 1 &&
+        _quantity <= variant.stockQuantity;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -134,9 +143,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   }
 
   Future<void> _addToCart() async {
+    if (_isAddingToCart) return;
     if (_selectedVariant == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng chọn phân loại sản phẩm')),
+      );
+      return;
+    }
+
+    if (!_canAddToCart) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Số lượng không hợp lệ hoặc biến thể đã hết hàng')),
       );
       return;
     }
@@ -211,6 +228,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   ? (selected) {
                       setState(() {
                         _selectedVariant = selected ? variant : null;
+                        _quantity = 1;
                       });
                     }
                   : null,
@@ -225,6 +243,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               fontWeight: FontWeight.w800,
               color: AppColors.primary,
             ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _selectedVariant!.stockQuantity > 0
+                ? 'Tồn kho: ${_selectedVariant!.stockQuantity}'
+                : 'Hết hàng',
           ),
         ],
       ],
@@ -258,11 +282,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             ),
             Text('$_quantity', style: Theme.of(context).textTheme.titleMedium),
             IconButton(
-              onPressed: () {
-                setState(() {
-                  _quantity++;
-                });
-              },
+              onPressed: _selectedVariant != null &&
+                      _selectedVariant!.isActive &&
+                      _quantity < _selectedVariant!.stockQuantity
+                  ? () {
+                      setState(() {
+                        _quantity++;
+                      });
+                    }
+                  : null,
               icon: const Icon(Icons.add),
               tooltip: 'Tăng số lượng',
             ),
@@ -410,7 +438,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: _isAddingToCart ? null : _addToCart,
+              onPressed: _isAddingToCart || !_canAddToCart ? null : _addToCart,
               icon: _isAddingToCart
                   ? const SizedBox(
                       width: 20,
