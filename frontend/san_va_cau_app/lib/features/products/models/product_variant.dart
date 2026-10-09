@@ -7,6 +7,7 @@ class ProductVariant {
     required this.price,
     this.imageUrl,
     required this.isActive,
+    this.stockQuantity = 0,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class ProductVariant {
   final String price;
   final String? imageUrl;
   final bool isActive;
+  final int stockQuantity;
 
   factory ProductVariant.fromJson(Map<String, dynamic> json) {
     return ProductVariant(
@@ -26,6 +28,7 @@ class ProductVariant {
       price: json['price']?.toString() ?? '0',
       imageUrl: json['imageUrl']?.toString(),
       isActive: json['isActive'] == true,
+      stockQuantity: int.tryParse(json['stockQuantity']?.toString() ?? '') ?? 0,
     );
   }
 }

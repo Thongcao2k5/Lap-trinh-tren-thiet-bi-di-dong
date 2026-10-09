@@ -13,6 +13,7 @@ type ProductVariantRow = {
   price: { toString: () => string };
   image_url: string | null;
   is_active: boolean;
+  inventory: { quantity: number } | null;
   product: {
     id: bigint;
     name: string;
@@ -27,6 +28,7 @@ const productVariantSelect = {
   price: true,
   image_url: true,
   is_active: true,
+  inventory: { select: { quantity: true } },
   product: {
     select: {
       id: true,
@@ -65,6 +67,7 @@ const toProductVariantResponse = (variant: ProductVariantRow) => ({
   price: variant.price.toString(),
   imageUrl: variant.image_url,
   isActive: variant.is_active,
+  stockQuantity: variant.inventory?.quantity ?? 0,
   product: {
     id: variant.product.id.toString(),
     name: variant.product.name,
