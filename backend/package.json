@@ -10,6 +10,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "seed": "prisma db seed",
+    "seed:products": "tsx src/database/seeds/seed-products-only.ts",
+    "test:product-seed": "tsx --test tests/product-seed-safety.test.ts",
     "smoke:test": "tsx scripts/smoke-test.ts",
     "test": "vitest run",
     "test:integration": "vitest run tests/integration",

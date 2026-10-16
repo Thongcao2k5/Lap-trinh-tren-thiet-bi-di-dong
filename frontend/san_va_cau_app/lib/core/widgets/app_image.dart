@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/api_config.dart';
 
 class AppImage extends StatelessWidget {
   const AppImage({
@@ -16,15 +17,32 @@ class AppImage extends StatelessWidget {
   final double? width;
   final double? height;
 
+  /// Uploads are served at the backend origin, outside its /api prefix.
+  static String? resolveSource(String source, {String? apiBaseUrl}) {
+    final value = source.trim();
+    if (value.isEmpty) return null;
+    if (value.startsWith('assets/')) return value;
+    final uri = Uri.tryParse(value);
+    if (uri == null) return null;
+    if (uri.scheme == 'http' || uri.scheme == 'https') return value;
+    if (value.startsWith('/uploads/') || value.startsWith('uploads/')) {
+      final base = Uri.parse(apiBaseUrl ?? ApiConfig.baseUrl);
+      return base.replace(path: '/', query: null, fragment: null)
+          .resolve(value).toString();
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (source.isEmpty) {
+    final resolved = resolveSource(source);
+    if (resolved == null) {
       return fallback;
     }
 
-    if (source.startsWith('assets/')) {
+    if (resolved.startsWith('assets/')) {
       return Image.asset(
-        source,
+        resolved,
         width: width,
         height: height,
         fit: fit,
@@ -33,7 +51,7 @@ class AppImage extends StatelessWidget {
     }
 
     return Image.network(
-      source,
+      resolved,
       width: width,
       height: height,
       fit: fit,

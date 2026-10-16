@@ -1,3 +1,4 @@
+import { productImages } from "./product-images.js";
 // DEMO only: illustrative configurations, prices and stock, not commercial specifications.
 export type DemoVariant = { sku: string; variantName: string; price: string; quantity: number };
 const products = [
@@ -49,34 +50,7 @@ const products = [
       sku: "DEMO-LINING-SAGA-LITE",
       featured: false,
     },
-    {
-      name: "Áo thể thao SanVaCau Pro",
-      category: "Áo thể thao",
-      brand: "SanVaCau",
-      price: "290000",
-      sku: "DEMO-SVC-SHIRT-PRO",
-      featured: false,
-    },
-    {
-      name: "Quấn cán vợt SanVaCau Comfort",
-      category: "Phụ kiện",
-      brand: "SanVaCau",
-      price: "45000",
-      sku: "DEMO-SVC-GRIP-COMFORT",
-      featured: false,
-    },
   ];
-
-const productImageBySku: Record<string, string> = {
-    "DEMO-YONEX-AX88D-GAME": "assets/demo/product-racket-yonex.jpg",
-    "DEMO-YONEX-NF700-PLAY": "assets/demo/product-racket-flypower.jpg",
-    "DEMO-LINING-AXFORCE-CANNON": "assets/demo/product-racket-blue.jpg",
-    "DEMO-VICTOR-RYUGA-TD": "assets/demo/product-racket-carlton.jpg",
-    "DEMO-YONEX-SHOE-65Z": "assets/demo/product-shoes.jpg",
-    "DEMO-LINING-SAGA-LITE": "assets/demo/product-shoes.jpg",
-    "DEMO-SVC-SHIRT-PRO": "assets/demo/product-racket-blue.jpg",
-    "DEMO-SVC-GRIP-COMFORT": "assets/demo/product-racket-carlton.jpg",
-  };
 
 
 export const productCatalog = products.map((item, index) => {
@@ -103,7 +77,8 @@ export const productCatalog = products.map((item, index) => {
       }
     }
   }
-  return { ...item, imageUrl: productImageBySku[item.sku], variants: [
+  // Exact-model photographs have not been cleared for redistribution.
+  return { ...item, imageUrl: productImages[item.name]?.imageUrl ?? null, variants: [
     { sku: item.sku, variantName: "Tiêu chuẩn", price: item.price, quantity: 20 }, ...variants,
   ] };
 });

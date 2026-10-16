@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_image.dart';
 import '../../branches/data/branch_api.dart';
 import '../../branches/models/branch.dart';
 import '../data/racket_service_api.dart';
@@ -260,12 +261,12 @@ class _ServiceImage extends StatelessWidget {
     if (url == null || url!.trim().isEmpty) return fallback;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: Image.network(
-        url!,
+      child: AppImage(
+        source: url!,
         width: 64,
         height: 64,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => fallback,
+        fallback: fallback,
       ),
     );
   }

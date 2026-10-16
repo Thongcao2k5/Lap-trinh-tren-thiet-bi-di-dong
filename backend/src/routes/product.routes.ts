@@ -181,13 +181,24 @@ productRouter.get("/", async (req, res, next) => {
       orderBy: {
         id: "desc",
       },
-      select: productSelect,
+      select: {
+        ...productSelect,
+        product_variant: {
+          where: { is_active: true },
+          orderBy: { price: "asc" },
+          take: 1,
+          select: { price: true },
+        },
+      },
     });
 
     res.json({
       success: true,
       data: {
-        products: products.map(toProductResponse),
+        products: products.map((product) => ({
+          ...toProductResponse(product),
+          minPrice: product.product_variant[0]?.price.toString() ?? null,
+        })),
       },
     });
   } catch (error) {
