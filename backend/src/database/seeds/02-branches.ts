@@ -21,16 +21,19 @@ const seedBranches = async () => {
       name: "SanVaCau Quận 1",
       address: "12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM",
       phone: "0901000001",
+      image_url: "/uploads/images/products/branch-quan-1.webp",
     },
     {
       name: "SanVaCau Thủ Đức",
       address: "45 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức, TP.HCM",
       phone: "0901000002",
+      image_url: "/uploads/images/products/branch-thu-duc.webp",
     },
     {
       name: "SanVaCau Bình Thạnh",
       address: "88 Xô Viết Nghệ Tĩnh, Phường 21, Bình Thạnh, TP.HCM",
       phone: "0901000003",
+      image_url: "/uploads/images/products/branch-binh-thanh.jpg",
     },
   ];
 

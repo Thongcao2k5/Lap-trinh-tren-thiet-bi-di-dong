@@ -21,7 +21,7 @@ class RacketServiceApi {
           id: 'srv1',
           name: 'Đan vợt cầu lông',
           description: 'Đan vợt chuyên nghiệp',
-          imageUrl: 'https://cdn.shopvnb.com/uploads/gallery/vot-cau-long-yonex-astrox-99-pro-trang-bach-ho-chinh-hang_1631584067.webp',
+          imageUrl: '/uploads/images/products/service-cang-day-vot.jpg',
         ),
         referencePrice: 50000,
         estimatedDuration: '30 phút',
@@ -34,10 +34,23 @@ class RacketServiceApi {
           id: 'srv2',
           name: 'Quấn cán vợt',
           description: 'Quấn cán chống mồ hôi',
-          imageUrl: 'https://cdn.shopvnb.com/uploads/gallery/vot-cau-long-victor-thruster-f-claw-tai-tzu-ying-chinh-hang-2_1688691523.webp',
+          imageUrl: '/uploads/images/products/service-thay-quan-can.jpg',
         ),
         referencePrice: 20000,
         estimatedDuration: '10 phút',
+      ),
+      BranchRacketService(
+        id: 's3',
+        branchId: 'br1',
+        serviceId: 'srv3',
+        service: RacketServiceInfo(
+          id: 'srv3',
+          name: 'Kiểm tra và sửa khung vợt',
+          description: 'Kiểm tra khung, gen và tư vấn phương án sửa phù hợp.',
+          imageUrl: '/uploads/images/products/service-sua-khung-vot.jpg',
+        ),
+        referencePrice: 100000,
+        estimatedDuration: '1 - 2 ngày',
       ),
     ];
   }

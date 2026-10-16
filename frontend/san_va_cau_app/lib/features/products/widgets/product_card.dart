@@ -10,6 +10,19 @@ class ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
 
+  String _formatPrice(String? value) {
+    final amount = double.tryParse(value ?? '');
+    if (amount == null || !amount.isFinite || amount < 0) return 'Liên hệ';
+    final digits = amount.round().toString();
+    final buffer = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      final remaining = digits.length - index;
+      buffer.write(digits[index]);
+      if (remaining > 1 && remaining % 3 == 1) buffer.write('.');
+    }
+    return 'Từ ${buffer.toString()} đ';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -20,9 +33,9 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 5, child: _ProductImage(imageUrl: product.imageUrl)),
+            Expanded(flex: 4, child: _ProductImage(imageUrl: product.imageUrl)),
             Expanded(
-              flex: 4,
+              flex: 5,
               child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: Column(
@@ -49,6 +62,16 @@ class ProductCard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
                         height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatPrice(product.minPrice),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const Spacer(),

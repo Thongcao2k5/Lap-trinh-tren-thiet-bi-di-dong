@@ -20,18 +20,21 @@ const seedRacketServices = async () => {
     {
       name: "Căng dây vợt",
       description: "Căng dây theo mức cân và loại dây khách hàng yêu cầu.",
+      imageUrl: "/uploads/images/products/service-cang-day-vot.jpg",
       referencePrice: "120000",
       estimatedDuration: "30 - 45 phút",
     },
     {
       name: "Thay quấn cán",
       description: "Tháo lớp quấn cũ, vệ sinh cán và thay quấn cán mới.",
+      imageUrl: "/uploads/images/products/service-thay-quan-can.jpg",
       referencePrice: "50000",
       estimatedDuration: "15 - 20 phút",
     },
     {
       name: "Kiểm tra và sửa khung vợt",
       description: "Kiểm tra khung, gen và tư vấn phương án sửa phù hợp.",
+      imageUrl: "/uploads/images/products/service-sua-khung-vot.jpg",
       referencePrice: "100000",
       estimatedDuration: "1 - 2 ngày",
     },
@@ -49,6 +52,7 @@ const seedRacketServices = async () => {
           data: {
             name: item.name,
             description: item.description,
+            image_url: item.imageUrl,
             is_active: true,
           },
         }),
@@ -57,6 +61,7 @@ const seedRacketServices = async () => {
           where: { id: existing.id },
           data: {
             description: item.description,
+            image_url: item.imageUrl,
             is_active: true,
           },
         }),
