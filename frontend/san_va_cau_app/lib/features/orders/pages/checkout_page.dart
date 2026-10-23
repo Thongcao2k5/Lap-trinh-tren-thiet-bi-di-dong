@@ -8,8 +8,6 @@ import '../../branches/data/branch_api.dart';
 import '../../branches/models/branch.dart';
 import '../../cart/models/cart.dart';
 import '../../payments/data/payment_api.dart';
-import '../../payments/models/payment.dart';
-import '../../payments/pages/mock_payment_page.dart';
 import '../../vouchers/data/voucher_api.dart';
 import '../../vouchers/models/voucher_quote.dart';
 import '../data/fulfillment_api.dart';
@@ -17,9 +15,28 @@ import '../data/order_api.dart';
 import '../models/order.dart';
 
 class CheckoutPage extends StatefulWidget {
-  const CheckoutPage({required this.cart, super.key});
+  const CheckoutPage({
+    required this.cart,
+    this.buyNowProductVariantId,
+    this.buyNowQuantity,
+    this.branchApi,
+    this.orderApi,
+    this.fulfillmentApi,
+    this.paymentApi,
+    this.voucherApi,
+    this.addressPicker,
+    super.key,
+  });
 
   final Cart cart;
+  final String? buyNowProductVariantId;
+  final int? buyNowQuantity;
+  final BranchApi? branchApi;
+  final OrderApi? orderApi;
+  final FulfillmentApi? fulfillmentApi;
+  final PaymentApi? paymentApi;
+  final VoucherApi? voucherApi;
+  final Future<CustomerAddress?> Function(BuildContext context)? addressPicker;
 
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
@@ -37,7 +54,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Branch? _selectedBranch;
   String _fulfillmentType = 'PICKUP';
   CustomerAddress? _selectedAddress;
-  String _paymentProvider = 'CASH';
   VoucherQuote? _voucherQuote;
   bool _isValidatingVoucher = false;
   bool _isSubmitting = false;
@@ -45,11 +61,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
   @override
   void initState() {
     super.initState();
-    _branchApi = BranchApi();
-    _orderApi = OrderApi();
-    _fulfillmentApi = FulfillmentApi();
-    _paymentApi = PaymentApi();
-    _voucherApi = VoucherApi();
+    _branchApi = widget.branchApi ?? BranchApi();
+    _orderApi = widget.orderApi ?? OrderApi();
+    _fulfillmentApi = widget.fulfillmentApi ?? FulfillmentApi();
+    _paymentApi = widget.paymentApi ?? PaymentApi();
+    _voucherApi = widget.voucherApi ?? VoucherApi();
     _branchesFuture = _branchApi.getBranches();
   }
 
@@ -84,9 +100,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
     });
 
     Order? createdOrder;
-    Payment? payment;
     try {
-      createdOrder = await _orderApi.createOrder(branchId: _selectedBranch!.id);
+      createdOrder = await _orderApi.createOrder(
+        branchId: _selectedBranch!.id,
+        productVariantId: widget.buyNowProductVariantId,
+        quantity: widget.buyNowQuantity,
+        cartItemIds: widget.buyNowProductVariantId == null
+            ? widget.cart.items.map((item) => item.id).toList()
+            : null,
+      );
 
       if (_fulfillmentType == 'DELIVERY') {
         await _fulfillmentApi.createDelivery(
@@ -105,39 +127,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         );
       }
 
-      payment = await _paymentApi.createPayment(
+      await _paymentApi.createPayment(
         targetType: 'ORDER',
         targetId: createdOrder.id,
-        provider: _paymentProvider,
+        provider: 'CASH',
       );
-      if (!mounted) return;
-
-      if (_paymentProvider == 'MOCK') {
-        final paid = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => MockPaymentPage(payment: payment!)),
-        );
-        if (!mounted) return;
-        if (paid != true) {
-          await showDialog<void>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Đơn hàng đã được lưu'),
-              content: const Text(
-                'Thanh toán chưa hoàn tất. Bạn có thể xem trạng thái trong Lịch sử thanh toán.',
-              ),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Hoàn tất'),
-                ),
-              ],
-            ),
-          );
-          if (mounted) Navigator.of(context).pop(true);
-          return;
-        }
-      }
-
       if (!mounted) return;
 
       await showDialog(
@@ -147,10 +141,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           title: const Text('Đặt hàng thành công'),
           content: Text(
             _fulfillmentType == 'DELIVERY'
-                ? 'Đơn hàng đã được ghi nhận và sẽ giao đến địa chỉ bạn chọn.'
-                : _paymentProvider == 'CASH'
-                ? 'Đơn hàng đã được ghi nhận. Bạn sẽ thanh toán khi nhận tại cơ sở.'
-                : 'Đơn hàng đã được ghi nhận và thanh toán thành công.',
+                ? 'Đơn hàng đã được ghi nhận. Bạn sẽ thanh toán tiền mặt khi nhận hàng.'
+                : 'Đơn hàng đã được ghi nhận. Bạn sẽ thanh toán tiền mặt khi nhận tại cơ sở.',
           ),
           actions: [
             FilledButton(
@@ -174,7 +166,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             builder: (context) => AlertDialog(
               title: const Text('Đơn hàng đã được tạo'),
               content: Text(
-                'Đơn #${createdOrder!.id} đã được tạo nhưng bước giao nhận hoặc thanh toán chưa hoàn tất. Vui lòng kiểm tra lại trong đơn hàng của tôi.',
+                'Đơn #${createdOrder!.id} đã được tạo nhưng bước giao nhận hoặc thanh toán chưa hoàn tất. ${e.message} Bạn có thể xem đơn hàng hoặc tiếp tục giao dịch trong Lịch sử thanh toán.',
               ),
               actions: [
                 FilledButton(
@@ -226,11 +218,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _selectAddress() async {
-    final address = await Navigator.of(context).push<CustomerAddress>(
-      MaterialPageRoute(
-        builder: (_) => const AddressListPage(selectionMode: true),
-      ),
-    );
+    final address = widget.addressPicker != null
+        ? await widget.addressPicker!(context)
+        : await Navigator.of(context).push<CustomerAddress>(
+            MaterialPageRoute(
+              builder: (_) => const AddressListPage(selectionMode: true),
+            ),
+          );
     if (address != null && mounted) {
       setState(() => _selectedAddress = address);
     }
@@ -512,36 +506,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                   ),
                             ),
                             const SizedBox(height: 12),
-                            SegmentedButton<String>(
-                              segments: const [
-                                ButtonSegment(
-                                  value: 'CASH',
-                                  icon: Icon(Icons.payments_outlined),
-                                  label: Text('Tiền mặt'),
-                                ),
-                                ButtonSegment(
-                                  value: 'MOCK',
-                                  icon: Icon(
-                                    Icons.account_balance_wallet_outlined,
-                                  ),
-                                  label: Text('Mô phỏng'),
-                                ),
-                              ],
-                              selected: {_paymentProvider},
-                              onSelectionChanged: (selection) {
-                                setState(() {
-                                  _paymentProvider = selection.first;
-                                });
-                              },
+                            const ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.payments_outlined),
+                              title: Text('Tiền mặt'),
                             ),
                             const SizedBox(height: 10),
-                            Text(
-                              _paymentProvider == 'CASH'
-                                  ? 'Thanh toán khi nhận hàng.'
-                                  : 'Dùng cổng mô phỏng để trình diễn luồng thanh toán.',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                              ),
+                            const Text(
+                              'Thanh toán tiền mặt khi nhận hàng.',
+                              style: TextStyle(color: AppColors.textSecondary),
                             ),
                           ],
                         ),

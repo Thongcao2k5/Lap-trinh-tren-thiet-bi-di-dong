@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:san_va_cau_app/core/theme/app_theme.dart';
+
+import 'admin_test_accessibility.dart';
+
 import 'package:san_va_cau_app/core/network/api_client.dart';
 import 'package:san_va_cau_app/features/admin/pages/admin_inventory_list_page.dart';
 import 'package:san_va_cau_app/features/admin/pages/admin_inventory_form_page.dart';
@@ -71,7 +77,7 @@ class FakeInventoryApi extends AdminInventoryApi {
 
   @override
   Future<AdminInventory> createInventory({
-    required String branchId,
+    String? branchId,
     required String productVariantId,
     required int quantity,
   }) async {
@@ -99,6 +105,18 @@ class FakeInventoryApi extends AdminInventoryApi {
       throw const ApiException(statusCode: 500, message: 'Save failed');
     }
     return mockInventories.first;
+  }
+}
+
+class PendingInventoryApi extends FakeInventoryApi {
+  final pending = Completer<AdminInventory>();
+  @override
+  Future<AdminInventory> updateInventoryQuantity({
+    required String inventoryId,
+    required int quantity,
+  }) {
+    updateCalls++;
+    return pending.future;
   }
 }
 
@@ -168,6 +186,118 @@ class FakeProductApi extends ProductApi {
 }
 
 void main() {
+  for (final size in [
+    const Size(320, 800),
+    const Size(375, 800),
+    const Size(800, 375),
+  ]) {
+    testWidgets('inventory and keyboard editor at $size with large text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = FakeInventoryApi();
+      Widget app(Widget home, {bool keyboard = false}) => MaterialApp(
+        theme: AppTheme.light(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.5),
+            viewInsets: keyboard
+                ? const EdgeInsets.only(bottom: 180)
+                : EdgeInsets.zero,
+          ),
+          child: child!,
+        ),
+        home: home,
+      );
+      await tester.pumpWidget(
+        app(AdminInventoryListPage(role: 'ADMIN', inventoryApi: api)),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await expectAdminAccessibility(tester);
+      await tester.scrollUntilVisible(
+        find.text('Sắp hết hàng · tồn kho thấp'),
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await expectAdminAccessibility(tester);
+      expect(find.text('Sắp hết hàng · tồn kho thấp'), findsOneWidget);
+      await tester.pumpWidget(
+        app(
+          AdminInventoryFormPage(
+            role: 'ADMIN',
+            inventory: api.mockInventories.first,
+            inventoryApi: api,
+          ),
+          keyboard: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('inventory-quantity-field')),
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.enterText(
+        find.byKey(const Key('inventory-quantity-field')),
+        '12',
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('inventory-submit-button')),
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await expectAdminAccessibility(tester);
+    });
+  }
+  testWidgets('inventory submit is locked while the request is pending', (
+    tester,
+  ) async {
+    final api = PendingInventoryApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AdminInventoryFormPage(
+          role: 'ADMIN',
+          inventory: api.mockInventories.first,
+          inventoryApi: api,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final button = find.byKey(const Key('inventory-submit-button'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+    expect(api.updateCalls, 1);
+    expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
+    api.pending.completeError(
+      const ApiException(statusCode: 500, message: 'Save failed'),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull);
+  });
   group('Admin Inventory Page Tests', () {
     late FakeInventoryApi inventoryApi;
     late FakeBranchApi branchApi;
@@ -226,16 +356,15 @@ void main() {
       );
     }
 
-    testWidgets('Loading state, success, low stock visual, missing branchId', (
+    testWidgets('STAFF can view global inventory without a branch assignment', (
       tester,
     ) async {
       await tester.pumpWidget(createListWidget('STAFF', null));
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('chưa được gán'),
-        findsOneWidget,
-      ); // missing branchId
-      expect(inventoryApi.getCalls, 0);
+      expect(find.text('Product 1'), findsWidgets);
+      expect(find.text('Kho chung'), findsWidgets);
+      expect(inventoryApi.getCalls, 1);
+      expect(inventoryApi.lastBranchId, isNull);
       expect(find.byType(FloatingActionButton), findsNothing);
     });
 
@@ -255,27 +384,13 @@ void main() {
       expect(find.text('Tồn kho'), findsWidgets);
     });
 
-    testWidgets('ADMIN can filter branches, create and edit', (tester) async {
+    testWidgets('ADMIN can create and edit global inventory', (tester) async {
       await tester.pumpWidget(createListWidget('ADMIN', null));
       await tester.pumpAndSettle();
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
-
-      // Open filter
-      await tester.tap(find.byIcon(Icons.filter_list));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Lọc theo chi nhánh'), findsOneWidget);
-
-      await tester.tap(find.text('Tất cả chi nhánh'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Branch 1').last);
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Áp dụng'));
-      await tester.pumpAndSettle();
-
-      expect(inventoryApi.lastBranchId, 'b1');
+      expect(find.byIcon(Icons.filter_list), findsNothing);
+      expect(inventoryApi.lastBranchId, isNull);
     });
 
     testWidgets('local search filters by SKU', (tester) async {
@@ -292,13 +407,15 @@ void main() {
       expect(find.text('SKU: SKU1'), findsNothing);
     });
 
-    testWidgets('BRANCH_MANAGER is locked and can create/edit', (tester) async {
+    testWidgets('BRANCH_MANAGER can view but cannot mutate global inventory', (
+      tester,
+    ) async {
       await tester.pumpWidget(createListWidget('BRANCH_MANAGER', 'b1'));
       await tester.pumpAndSettle();
 
-      expect(inventoryApi.lastBranchId, 'b1');
-      expect(find.byIcon(Icons.filter_list), findsNothing); // No filter icon
-      expect(find.byType(FloatingActionButton), findsOneWidget); // Can create
+      expect(inventoryApi.lastBranchId, isNull);
+      expect(find.byIcon(Icons.filter_list), findsNothing);
+      expect(find.byType(FloatingActionButton), findsNothing);
     });
 
     testWidgets('STAFF is locked and sees no mutation controls', (
@@ -307,7 +424,7 @@ void main() {
       await tester.pumpWidget(createListWidget('STAFF', 'b1'));
       await tester.pumpAndSettle();
 
-      expect(inventoryApi.lastBranchId, 'b1');
+      expect(inventoryApi.lastBranchId, isNull);
       expect(find.byIcon(Icons.filter_list), findsNothing);
       expect(find.byType(FloatingActionButton), findsNothing);
     });
@@ -354,18 +471,8 @@ void main() {
       await tester.ensureVisible(submitBtn);
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
-      expect(find.text('Vui lòng chọn chi nhánh'), findsOneWidget);
       expect(find.text('Vui lòng chọn sản phẩm'), findsOneWidget);
       expect(find.text('Vui lòng nhập số lượng'), findsOneWidget);
-
-      // Select Branch
-      await tester.ensureVisible(
-        find.byKey(const Key('inventory-branch-field')),
-      );
-      await tester.tap(find.byKey(const Key('inventory-branch-field')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Branch 1').last);
-      await tester.pumpAndSettle();
 
       // Select Product
       await tester.tap(find.byKey(const Key('inventory-product-field')));
@@ -391,7 +498,7 @@ void main() {
 
       expect(find.text('Push'), findsOneWidget);
       expect(inventoryApi.createCalls, 1);
-      expect(inventoryApi.lastCreatedBranchId, 'b1');
+      expect(inventoryApi.lastCreatedBranchId, isNull);
       expect(inventoryApi.lastCreatedVariantId, 'v2');
       expect(inventoryApi.lastQuantity, 10);
     });
@@ -400,11 +507,6 @@ void main() {
       await tester.pumpWidget(createFormWidget('ADMIN', null));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Push'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('inventory-branch-field')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Branch 1').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('inventory-product-field')));
@@ -429,7 +531,7 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
       expect(
-        find.text('Sản phẩm này đã có trong tồn kho của chi nhánh'),
+        find.text('Phân loại sản phẩm này đã có trong tồn kho'),
         findsOneWidget,
       );
       final quantityField = tester.widget<TextFormField>(

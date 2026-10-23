@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:san_va_cau_app/core/theme/app_theme.dart';
+
+import 'admin_test_accessibility.dart';
+
 import 'package:san_va_cau_app/core/network/api_client.dart';
 import 'package:san_va_cau_app/features/admin/pages/admin_product_detail_page.dart';
 import 'package:san_va_cau_app/features/admin/pages/admin_product_form_page.dart';
@@ -10,6 +14,7 @@ import 'package:san_va_cau_app/features/products/models/product.dart';
 import 'package:san_va_cau_app/features/products/models/product_variant.dart';
 
 class FakeProductApi extends ProductApi {
+  int createProductCalls = 0;
   int getProductsCallCount = 0;
   String? lastCategoryId;
   String? lastBrandId;
@@ -26,6 +31,20 @@ class FakeProductApi extends ProductApi {
       imageUrl: 'img1.jpg',
       isActive: true,
       isFeatured: true,
+      createdAt: DateTime(2023),
+      updatedAt: DateTime(2023),
+      category: const ProductCategory(id: 'c1', name: 'Cat 1'),
+      brand: const ProductBrand(id: 'b1', name: 'Brand 1'),
+    ),
+    Product(
+      id: 'p2',
+      categoryId: 'c1',
+      brandId: 'b1',
+      name: 'Vợt luyện tập',
+      description: 'Sản phẩm thường',
+      imageUrl: 'img2.jpg',
+      isActive: true,
+      isFeatured: false,
       createdAt: DateTime(2023),
       updatedAt: DateTime(2023),
       category: const ProductCategory(id: 'c1', name: 'Cat 1'),
@@ -78,6 +97,7 @@ class FakeProductApi extends ProductApi {
 
   @override
   Future<Product> createAdminProduct(Map<String, dynamic> body) async {
+    createProductCalls++;
     if (body['name'] == 'Conflict') {
       throw const ApiException(statusCode: 409, message: 'Conflict name');
     }
@@ -120,6 +140,97 @@ class FakeProductApi extends ProductApi {
 }
 
 void main() {
+  testWidgets('scrolled product form validates fields above the keyboard', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = FakeProductApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(viewInsets: const EdgeInsets.only(bottom: 250)),
+          child: child!,
+        ),
+        home: AdminProductFormPage(productApi: api),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byType(ElevatedButton),
+      150,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getBottomRight(find.byType(ElevatedButton)).dy,
+      lessThanOrEqualTo(550),
+    );
+    await tester.tap(find.byType(ElevatedButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Vui lòng nhập tên sản phẩm'), findsOneWidget);
+    expect(api.createProductCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+  for (final size in [
+    const Size(320, 800),
+    const Size(375, 800),
+    const Size(800, 375),
+  ]) {
+    testWidgets('product pages at $size and text scale 1.5', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = FakeProductApi();
+      final pages = [
+        AdminProductListPage(isAdmin: true, productApi: api),
+        AdminProductDetailPage(productId: 'p1', isAdmin: true, productApi: api),
+        AdminProductFormPage(productApi: api),
+        AdminVariantFormPage(productId: 'p1', productApi: api),
+      ];
+      for (var i = 0; i < pages.length; i++) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            key: ValueKey(i),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.5),
+                viewInsets: i > 1
+                    ? const EdgeInsets.only(bottom: 160)
+                    : EdgeInsets.zero,
+              ),
+              child: child!,
+            ),
+            home: pages[i],
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'page $i');
+        await expectAdminAccessibility(tester);
+        if (i == 0) {
+          await tester.tap(find.byTooltip('Lọc'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.ensureVisible(find.text('Áp dụng'));
+          await tester.tap(find.text('Áp dụng'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
+        if (find.byType(ListView).evaluate().isNotEmpty) {
+          await tester.drag(find.byType(ListView).last, const Offset(0, -2500));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull, reason: 'scrolled page $i');
+          await expectAdminAccessibility(tester);
+        }
+      }
+    });
+  }
   group('Admin Product Page Tests', () {
     late FakeProductApi productApi;
 
@@ -183,6 +294,32 @@ void main() {
       await tester.tap(find.text('Thử lại'));
       await tester.pumpAndSettle();
       expect(find.text('Product 1'), findsOneWidget);
+    });
+
+    testWidgets('searches locally and filters featured products', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createListWidget(true));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Tìm sản phẩm, danh mục, thương hiệu'),
+        'luyện tập',
+      );
+      await tester.pump();
+      expect(find.text('Vợt luyện tập'), findsOneWidget);
+      expect(find.text('Product 1'), findsNothing);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Tìm sản phẩm, danh mục, thương hiệu'),
+        '',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Chỉ sản phẩm nổi bật'));
+      await tester.pump();
+
+      expect(find.text('Product 1'), findsOneWidget);
+      expect(find.text('Vợt luyện tập'), findsNothing);
     });
 
     testWidgets(
@@ -325,43 +462,94 @@ void main() {
       await tester.drag(find.byType(ListView), const Offset(0, -500));
       await tester.pumpAndSettle();
 
-      final submitBtn = find.text('Tạo phân loại', skipOffstage: false).last;
+      final submitBtn = find.byKey(const Key('variant-submit'));
+      final formScrollable = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        submitBtn,
+        300,
+        scrollable: formScrollable,
+      );
       await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pump();
 
-      expect(find.text('Vui lòng nhập mã SKU'), findsOneWidget);
-      expect(find.text('Vui lòng nhập tên phân loại'), findsOneWidget);
-      expect(find.text('Vui lòng nhập giá'), findsOneWidget);
+      expect(
+        find.text('Vui lòng nhập mã SKU', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Vui lòng nhập tên phân loại', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Vui lòng nhập giá', skipOffstage: false),
+        findsOneWidget,
+      );
 
-      await tester.enterText(
-        find.byType(TextFormField).at(0),
-        'CONFLICT',
-      ); // SKU
-      await tester.enterText(find.byType(TextFormField).at(1), 'V1'); // Name
-      await tester.enterText(
-        find.byType(TextFormField).at(2),
-        '150.5',
-      ); // Price
+      await tester.drag(find.byType(ListView).last, const Offset(0, 2000));
+      await tester.pumpAndSettle();
+      final skuField = find.byKey(const Key('variant-sku'));
+      final nameField = find.byKey(const Key('variant-name'));
+      final priceField = find.byKey(const Key('variant-price'));
+      await tester.scrollUntilVisible(
+        skuField,
+        -300,
+        scrollable: formScrollable,
+      );
+      await tester.enterText(skuField, 'CONFLICT'); // SKU
+      await tester.scrollUntilVisible(
+        nameField,
+        100,
+        scrollable: formScrollable,
+      );
+      await tester.enterText(nameField, 'V1'); // Name
+      await tester.scrollUntilVisible(
+        priceField,
+        100,
+        scrollable: formScrollable,
+      );
+      await tester.enterText(priceField, '150.5'); // Price
+      await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(
+        submitBtn,
+        300,
+        scrollable: formScrollable,
+      );
       await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('SKU đã tồn tại'),
+        find.textContaining('SKU đã tồn tại', skipOffstage: false),
         findsOneWidget,
       ); // Backend error
 
-      await tester.enterText(
-        find.byType(TextFormField).at(0),
-        'SKU2',
-      ); // Good SKU
+      await tester.drag(find.byType(ListView).last, const Offset(0, 2000));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        skuField,
+        -300,
+        scrollable: formScrollable,
+      );
+      await tester.enterText(skuField, 'SKU2'); // Good SKU
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        submitBtn,
+        300,
+        scrollable: formScrollable,
+      );
       await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Tạo phân loại thành công'), findsOneWidget);
+      expect(
+        find.textContaining('Tạo phân loại thành công', skipOffstage: false),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Variant inactivation confirmation', (tester) async {

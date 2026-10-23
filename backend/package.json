@@ -12,6 +12,10 @@
     "seed": "prisma db seed",
     "seed:products": "tsx src/database/seeds/seed-products-only.ts",
     "test:product-seed": "tsx --test tests/product-seed-safety.test.ts",
+    "migrate:half-hour-slots": "tsx scripts/migrate-half-hour-slots.ts",
+    "schedule:fill": "tsx scripts/fill-court-schedule.ts",
+    "db:export-demo": "tsx scripts/export-demo-database.ts",
+    "db:restore-demo": "tsx scripts/restore-demo-database.ts",
     "smoke:test": "tsx scripts/smoke-test.ts",
     "test": "vitest run",
     "test:integration": "vitest run tests/integration",
@@ -34,6 +38,7 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
+    "nodemailer": "^10.0.16",
     "pg": "^8.23.0"
   },
   "devDependencies": {
@@ -42,6 +47,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.5.1",
+    "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^7.2.1",
     "prisma": "^7.10.0",
     "supertest": "^7.3.0",

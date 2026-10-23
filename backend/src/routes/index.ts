@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authRouter } from "./auth.routes.js";
+import { otpAuthRouter } from "./otp-auth.routes.js";
 import { branchRouter } from "./branch.routes.js";
 import { categoryRouter } from "./category.routes.js";
 import { brandRouter } from "./brand.routes.js"; // Import route brand
@@ -22,6 +23,8 @@ import { uploadRouter } from "./upload.routes.js";
 import { auditLogRouter } from "./audit-log.routes.js";
 import { notificationRouter } from "./notification.routes.js";
 import { paymentRouter } from "./payment.routes.js";
+import { vnpayRouter } from "./vnpay.routes.js";
+import { momoRouter } from "./momo.routes.js";
 import { reviewRouter } from "./review.routes.js";
 import { favoriteRouter } from "./favorite.routes.js";
 import { searchRouter } from "./search.routes.js";
@@ -60,6 +63,7 @@ router.get("/health/db", async (_req, res, next) => {
 });
 router.use("/brands", brandRouter); // Gắn brand API vào /api/brands
 router.use("/auth", authRouter);
+router.use("/auth", otpAuthRouter);
 router.use("/branches", branchRouter);
 router.use("/categories", categoryRouter);
 router.use("/products", productRouter);
@@ -80,6 +84,8 @@ router.use("/uploads", uploadRouter);
 router.use("/audit-logs", auditLogRouter);
 router.use("/notifications", notificationRouter);
 router.use("/payments", paymentRouter);
+router.use("/payments/momo", momoRouter);
+router.use("/payments/vnpay", vnpayRouter);
 router.use("/reviews", reviewRouter);
 router.use("/favorites", favoriteRouter);
 router.use("/search", searchRouter);

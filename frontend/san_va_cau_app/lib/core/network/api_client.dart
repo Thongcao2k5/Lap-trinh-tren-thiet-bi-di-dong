@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 
 import '../constants/api_config.dart';
 
 class ApiClient {
   ApiClient({http.Client? httpClient, String? baseUrl})
-      : baseUrl = baseUrl ?? ApiConfig.baseUrl,
-        _httpClient = httpClient ?? http.Client();
+    : baseUrl = baseUrl ?? ApiConfig.baseUrl,
+      _httpClient = httpClient ?? http.Client();
 
   final http.Client _httpClient;
   final String baseUrl;
@@ -62,6 +64,21 @@ class ApiClient {
     return _decodeResponse(response);
   }
 
+  Future<Map<String, dynamic>> put(
+    String path, {
+    Map<String, String>? queryParameters,
+    Map<String, dynamic>? body,
+    String? token,
+  }) async {
+    final response = await _httpClient.put(
+      _buildUri(path, queryParameters),
+      headers: _buildHeaders(token),
+      body: jsonEncode(body ?? <String, dynamic>{}),
+    );
+
+    return _decodeResponse(response);
+  }
+
   Future<Map<String, dynamic>> delete(
     String path, {
     Map<String, String>? queryParameters,
@@ -73,6 +90,35 @@ class ApiClient {
     );
 
     return _decodeResponse(response);
+  }
+
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    required String filePath,
+    String fieldName = 'image',
+    String? token,
+  }) async {
+    final mimeType = lookupMimeType(filePath) ?? 'application/octet-stream';
+    const allowedImageTypes = {'image/jpeg', 'image/png', 'image/webp'};
+
+    if (!allowedImageTypes.contains(mimeType)) {
+      throw const ApiException(
+        statusCode: 400,
+        message: 'Định dạng ảnh không được hỗ trợ. Vui lòng chọn ảnh JPEG, PNG hoặc WebP.',
+      );
+    }
+
+    final request = http.MultipartRequest('POST', _buildUri(path));
+    request.headers.addAll(_buildHeaders(token)..remove('Content-Type'));
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        fieldName,
+        filePath,
+        contentType: MediaType.parse(mimeType),
+      ),
+    );
+    final streamedResponse = await _httpClient.send(request);
+    return _decodeResponse(await http.Response.fromStream(streamedResponse));
   }
 
   Map<String, String> _buildHeaders(String? token) {
@@ -96,7 +142,27 @@ class ApiClient {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         var message = decoded['message']?.toString() ?? 'Yêu cầu thất bại';
 
-        if (response.statusCode == 401) {
+        if (response.statusCode == 400) {
+          if (message.contains('email is invalid')) {
+            message = 'Email không đúng định dạng';
+          } else if (message.contains('registration data is invalid')) {
+            message = 'Thông tin đăng ký không hợp lệ';
+          } else if (message.contains('OTP is invalid or expired')) {
+            message = 'Mã OTP không đúng hoặc đã hết hạn';
+          } else if (message.contains('reset data is invalid')) {
+            message = 'Thông tin đặt lại mật khẩu không hợp lệ';
+          } else if (message.contains(
+            'new password must be different from current password',
+          )) {
+            message = 'Mật khẩu mới phải khác mật khẩu hiện tại';
+          } else if (message.contains('Invalid file type')) {
+            message = 'Định dạng ảnh không được hỗ trợ. Vui lòng chọn ảnh JPEG, PNG hoặc WebP.';
+          } else if (message.contains('File is too large')) {
+            message = 'Ảnh vượt quá 5 MB. Vui lòng chọn ảnh nhỏ hơn.';
+          } else if (message.contains('No image file provided')) {
+            message = 'Không tìm thấy ảnh để tải lên.';
+          }
+        } else if (response.statusCode == 401) {
           if (message.contains('invalid email or password')) {
             message = 'Email hoặc mật khẩu không chính xác';
           } else if (message.contains('current password is incorrect')) {
@@ -114,6 +180,8 @@ class ApiClient {
           if (message.contains('email already exists')) {
             message = 'Email đã được đăng ký, vui lòng sử dụng email khác.';
           }
+        } else if (response.statusCode == 429) {
+          message = 'Vui lòng chờ trước khi yêu cầu gửi lại mã OTP.';
         }
 
         throw ApiException(statusCode: response.statusCode, message: message);

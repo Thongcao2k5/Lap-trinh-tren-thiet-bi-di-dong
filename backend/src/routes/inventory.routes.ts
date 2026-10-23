@@ -14,10 +14,7 @@ type InventoryRow = {
     id: bigint;
     sku: string;
     variant_name: string;
-    product: {
-      id: bigint;
-      name: string;
-    };
+    product: { id: bigint; name: string };
   };
 };
 
@@ -31,35 +28,19 @@ const inventorySelect = {
       id: true,
       sku: true,
       variant_name: true,
-      product: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
+      product: { select: { id: true, name: true } },
     },
   },
 } as const;
 
-const parseBigIntId = (value: string | string[] | undefined) => {
-  return typeof value === "string" && /^\d+$/.test(value) ? BigInt(value) : null;
-};
-
-const parseBodyBigIntId = (value: unknown) => {
-  if (typeof value === "string" && /^\d+$/.test(value)) {
-    return BigInt(value);
-  }
-
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-    return BigInt(value);
-  }
-
+const parseBigIntId = (value: unknown) => {
+  if (typeof value === "string" && /^\d+$/.test(value)) return BigInt(value);
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return BigInt(value);
   return null;
 };
 
 const parseQuantity = (value: unknown) => {
   const quantity = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
-
   return Number.isInteger(quantity) && quantity >= 0 ? quantity : null;
 };
 
@@ -97,7 +78,7 @@ const findActiveProductVariant = (id: bigint) => {
 inventoryRouter.get("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "STAFF"]), async (req, res, next) => {
   try {
     const productVariantId =
-      req.query.productVariantId === undefined ? null : parseBodyBigIntId(req.query.productVariantId);
+      req.query.productVariantId === undefined ? null : parseBigIntId(req.query.productVariantId);
 
     if (req.query.productVariantId !== undefined && !productVariantId) {
       res.status(400).json({
@@ -117,9 +98,7 @@ inventoryRouter.get("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "S
         },
         ...(productVariantId ? { product_variant_id: productVariantId } : {}),
       },
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: [{ quantity: "asc" }, { id: "asc" }],
       select: inventorySelect,
     });
 
@@ -170,9 +149,9 @@ inventoryRouter.get("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER",
   }
 });
 
-inventoryRouter.post("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]), async (req, res, next) => {
+inventoryRouter.post("/", requireAuth, requireRole("ADMIN"), async (req, res, next) => {
   try {
-    const productVariantId = parseBodyBigIntId(req.body?.productVariantId);
+    const productVariantId = parseBigIntId(req.body?.productVariantId);
     const quantity = parseQuantity(req.body?.quantity);
 
     if (!productVariantId || quantity === null) {
@@ -201,12 +180,8 @@ inventoryRouter.post("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]),
         id: true,
       },
     });
-
     if (existingInventory) {
-      res.status(409).json({
-        success: false,
-        message: "inventory already exists",
-      });
+      res.status(409).json({ success: false, message: "inventory already exists" });
       return;
     }
 
@@ -218,38 +193,27 @@ inventoryRouter.post("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]),
       },
       select: inventorySelect,
     });
-
     res.status(201).json({
       success: true,
       message: "Inventory created successfully",
-      data: {
-        inventory: toInventoryResponse(inventory),
-      },
+      data: { inventory: toInventoryResponse(inventory) },
     });
   } catch (error) {
     next(error);
   }
 });
 
-inventoryRouter.patch("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER"]), async (req, res, next) => {
+inventoryRouter.patch("/:id", requireAuth, requireRole("ADMIN"), async (req, res, next) => {
   try {
     const id = parseBigIntId(req.params.id);
-
     if (!id) {
-      res.status(400).json({
-        success: false,
-        message: "invalid inventory id",
-      });
+      res.status(400).json({ success: false, message: "invalid inventory id" });
       return;
     }
 
     const quantity = parseQuantity(req.body?.quantity);
-
     if (quantity === null) {
-      res.status(400).json({
-        success: false,
-        message: "quantity is required",
-      });
+      res.status(400).json({ success: false, message: "quantity is required" });
       return;
     }
 
@@ -261,28 +225,19 @@ inventoryRouter.patch("/:id", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER
     });
 
     if (!existingInventory) {
-      res.status(404).json({
-        success: false,
-        message: "inventory not found",
-      });
+      res.status(404).json({ success: false, message: "inventory not found" });
       return;
     }
 
     const inventory = await prisma.inventory.update({
       where: { id },
-      data: {
-        quantity,
-        updated_at: new Date(),
-      },
+      data: { quantity, updated_at: new Date() },
       select: inventorySelect,
     });
-
     res.json({
       success: true,
       message: "Inventory updated successfully",
-      data: {
-        inventory: toInventoryResponse(inventory),
-      },
+      data: { inventory: toInventoryResponse(inventory) },
     });
   } catch (error) {
     next(error);

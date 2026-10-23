@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../theme/admin_theme.dart';
+import '../widgets/admin_ui.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../branches/data/branch_api.dart';
-import '../../branches/models/branch.dart';
 import '../../products/data/product_api.dart';
 import '../../products/models/product.dart';
 import '../../products/models/product_variant.dart';
@@ -35,7 +37,6 @@ class AdminInventoryFormPage extends StatefulWidget {
 class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
   late final AdminInventoryApi _api;
   late final ProductApi _productApi;
-  late final BranchApi _branchApi;
 
   final _formKey = GlobalKey<FormState>();
   final _quantityController = TextEditingController();
@@ -43,9 +44,6 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
   bool _isLoadingData = true;
   bool _isSubmitting = false;
   String? _error;
-
-  List<Branch> _branches = [];
-  String? _selectedBranchId;
 
   List<Product> _products = [];
   String? _selectedProductId;
@@ -55,16 +53,13 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
 
   bool get isAdmin => widget.role == 'ADMIN';
   bool get isEditing => widget.inventory != null;
-  bool get canMutate => isAdmin || widget.role == 'BRANCH_MANAGER';
-  bool get hasAssignedBranch =>
-      widget.assignedBranchId != null && widget.assignedBranchId!.isNotEmpty;
+  bool get canMutate => isAdmin;
 
   @override
   void initState() {
     super.initState();
     _api = widget.inventoryApi ?? AdminInventoryApi();
     _productApi = widget.productApi ?? ProductApi();
-    _branchApi = widget.branchApi ?? BranchApi();
 
     if (!canMutate) {
       _isLoadingData = false;
@@ -72,21 +67,10 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
       return;
     }
 
-    if (!isAdmin && !hasAssignedBranch) {
-      _isLoadingData = false;
-      _error =
-          'Tài khoản của bạn chưa được gán cho bất kỳ chi nhánh nào. '
-          'Vui lòng liên hệ quản trị viên.';
-      return;
-    }
-
     if (isEditing) {
       _quantityController.text = widget.inventory!.quantity.toString();
       _isLoadingData = false;
     } else {
-      if (!isAdmin) {
-        _selectedBranchId = widget.assignedBranchId;
-      }
       _loadFormData();
     }
   }
@@ -104,27 +88,11 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
     });
 
     try {
-      final futures = <Future>[_productApi.getProducts()];
-
-      if (isAdmin) {
-        futures.add(_branchApi.getBranches());
-      }
-
-      final results = await Future.wait(futures);
+      final products = await _productApi.getProducts();
 
       if (mounted) {
         setState(() {
-          _products = (results[0] as List<Product>)
-              .where((p) => p.isActive)
-              .toList();
-          if (isAdmin) {
-            _branches = (results[1] as List<Branch>)
-                .where((b) => b.status == 'ACTIVE')
-                .toList();
-          } else {
-            // For BRANCH_MANAGER we could optionally fetch branch name if we wanted,
-            // but the backend enforces the branchId anyway.
-          }
+          _products = products.where((p) => p.isActive).toList();
           _isLoadingData = false;
         });
       }
@@ -166,13 +134,8 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
   }
 
   Future<void> _submit() async {
-    if (!canMutate || (!isAdmin && !hasAssignedBranch)) return;
+    if (!canMutate || _isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
-
-    if (!isEditing && _selectedBranchId == null) {
-      setState(() => _error = 'Vui lòng chọn chi nhánh');
-      return;
-    }
 
     if (!isEditing && _selectedVariantId == null) {
       setState(() => _error = 'Vui lòng chọn phân loại sản phẩm');
@@ -205,7 +168,7 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
           ],
         ),
       );
-      if (confirm != true) return;
+      if (confirm != true || !mounted || _isSubmitting) return;
     }
 
     setState(() {
@@ -221,7 +184,6 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
         );
       } else {
         await _api.createInventory(
-          branchId: _selectedBranchId!,
           productVariantId: _selectedVariantId!,
           quantity: quantity,
         );
@@ -244,7 +206,7 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
       if (mounted) {
         setState(() {
           if (e.statusCode == 409) {
-            _error = 'Sản phẩm này đã có trong tồn kho của chi nhánh';
+            _error = 'Phân loại sản phẩm này đã có trong tồn kho';
           } else {
             _error = e.toString();
           }
@@ -263,188 +225,205 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(isEditing ? 'Cập nhật tồn kho' : 'Thêm tồn kho'),
-        centerTitle: true,
-      ),
-      body: _isLoadingData && !isEditing
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
-          : !canMutate || (!isAdmin && !hasAssignedBranch)
-          ? _buildBlockingError()
-          : Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (_error != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: AppColors.primarySoft,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: AppColors.primary),
-                      ),
-                    ),
-
-                  if (isEditing) ...[
-                    _buildReadOnlyField(
-                      'Chi nhánh',
-                      widget.inventory!.branch?.name ??
-                          widget.inventory!.branchId,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildReadOnlyField(
-                      'Sản phẩm',
-                      widget.inventory!.productVariant?.product?.name ?? 'N/A',
-                    ),
-                    const SizedBox(height: 16),
-                    _buildReadOnlyField(
-                      'Phân loại',
-                      widget.inventory!.productVariant?.variantName ?? 'N/A',
-                    ),
-                    const SizedBox(height: 16),
-                    _buildReadOnlyField(
-                      'SKU',
-                      widget.inventory!.productVariant?.sku ?? 'N/A',
-                    ),
-                  ] else ...[
-                    if (isAdmin)
-                      DropdownButtonFormField<String>(
-                        key: const Key('inventory-branch-field'),
-                        initialValue: _selectedBranchId,
-                        decoration: const InputDecoration(
-                          labelText: 'Chi nhánh *',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: _branches
-                            .map(
-                              (b) => DropdownMenuItem(
-                                value: b.id,
-                                child: Text(b.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          setState(() => _selectedBranchId = val);
-                        },
-                        validator: (val) =>
-                            val == null ? 'Vui lòng chọn chi nhánh' : null,
-                      )
-                    else
-                      _buildReadOnlyField(
-                        'Chi nhánh',
-                        'Chi nhánh #${widget.assignedBranchId} (Cố định)',
-                      ),
-
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      key: const Key('inventory-product-field'),
-                      initialValue: _selectedProductId,
-                      decoration: const InputDecoration(
-                        labelText: 'Sản phẩm *',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _products
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p.id,
-                              child: Text(p.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedProductId = val;
-                        });
-                        if (val != null) {
-                          _loadVariants(val);
-                        }
-                      },
-                      validator: (val) =>
-                          val == null ? 'Vui lòng chọn sản phẩm' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    if (_selectedProductId != null)
-                      if (_isLoadingData)
-                        const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primary,
-                          ),
-                        )
-                      else
-                        DropdownButtonFormField<String>(
-                          key: const Key('inventory-variant-field'),
-                          initialValue: _selectedVariantId,
-                          decoration: const InputDecoration(
-                            labelText: 'Phân loại (SKU) *',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: _variants
-                              .map(
-                                (v) => DropdownMenuItem(
-                                  value: v.id,
-                                  child: Text('${v.variantName} (${v.sku})'),
+    return Theme(
+      data: AdminTheme.data(Theme.of(context)),
+      child: Scaffold(
+        backgroundColor: AdminTheme.canvas,
+        appBar: AppBar(
+          title: Text(isEditing ? 'Cập nhật tồn kho' : 'Thêm tồn kho'),
+          backgroundColor: AdminTheme.graphite,
+          foregroundColor: Colors.white,
+        ),
+        body: SafeArea(
+          child: _isLoadingData && !isEditing
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                )
+              : !canMutate
+              ? _buildBlockingError()
+              : Form(
+                  key: _formKey,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_error != null)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: AppColors.primarySoft,
+                                borderRadius: BorderRadius.circular(
+                                  AdminTheme.compactRadius,
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            setState(() => _selectedVariantId = val);
-                          },
-                          validator: (val) =>
-                              val == null ? 'Vui lòng chọn phân loại' : null,
-                        ),
-                  ],
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                _error!,
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
 
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    key: const Key('inventory-quantity-field'),
-                    controller: _quantityController,
-                    decoration: const InputDecoration(
-                      labelText: 'Số lượng *',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (val) {
-                      if (val == null || val.isEmpty) {
-                        return 'Vui lòng nhập số lượng';
-                      }
-                      final num = int.tryParse(val);
-                      if (num == null) return 'Số lượng phải là số nguyên';
-                      if (num < 0) return 'Số lượng không được âm';
-                      return null;
-                    },
-                  ),
+                          if (isEditing) ...[
+                            _buildReadOnlyField(
+                              'Sản phẩm',
+                              widget.inventory!.productVariant?.product?.name ??
+                                  'N/A',
+                            ),
+                            const SizedBox(height: 16),
+                            _buildReadOnlyField(
+                              'Phân loại',
+                              widget.inventory!.productVariant?.variantName ??
+                                  'N/A',
+                            ),
+                            const SizedBox(height: 16),
+                            _buildReadOnlyField(
+                              'SKU',
+                              widget.inventory!.productVariant?.sku ?? 'N/A',
+                            ),
+                          ] else ...[
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              key: const Key('inventory-product-field'),
+                              initialValue: _selectedProductId,
+                              decoration: const InputDecoration(
+                                labelText: 'Sản phẩm *',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: _products
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p.id,
+                                      child: Text(
+                                        p.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedProductId = val;
+                                });
+                                if (val != null) {
+                                  _loadVariants(val);
+                                }
+                              },
+                              validator: (val) =>
+                                  val == null ? 'Vui lòng chọn sản phẩm' : null,
+                            ),
+                            const SizedBox(height: 16),
+                            if (_selectedProductId != null)
+                              if (_isLoadingData)
+                                const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.primary,
+                                  ),
+                                )
+                              else
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  key: const Key('inventory-variant-field'),
+                                  initialValue: _selectedVariantId,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Phân loại (SKU) *',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: _variants
+                                      .map(
+                                        (v) => DropdownMenuItem(
+                                          value: v.id,
+                                          child: Text(
+                                            '${v.variantName} (${v.sku})',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (val) {
+                                    setState(() => _selectedVariantId = val);
+                                  },
+                                  validator: (val) => val == null
+                                      ? 'Vui lòng chọn phân loại'
+                                      : null,
+                                ),
+                          ],
 
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      key: const Key('inventory-submit-button'),
-                      onPressed: _isSubmitting ? null : _submit,
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(isEditing ? 'Lưu thay đổi' : 'Thêm tồn kho'),
-                    ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            key: const Key('inventory-quantity-field'),
+                            controller: _quantityController,
+                            decoration: const InputDecoration(
+                              labelText: 'Số lượng *',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.done,
+                            scrollPadding: const EdgeInsets.all(32),
+                            enabled: !_isSubmitting,
+                            validator: (val) {
+                              if (val == null || val.isEmpty) {
+                                return 'Vui lòng nhập số lượng';
+                              }
+                              final num = int.tryParse(val);
+                              if (num == null) {
+                                return 'Số lượng phải là số nguyên';
+                              }
+                              if (num < 0) return 'Số lượng không được âm';
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 32),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              key: const Key('inventory-submit-button'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AdminTheme.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AdminTheme.compactRadius,
+                                  ),
+                                ),
+                              ),
+                              onPressed: _isSubmitting ? null : _submit,
+                              child: _isSubmitting
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      isEditing
+                                          ? 'Lưu thay đổi'
+                                          : 'Thêm tồn kho',
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+        ),
+      ),
     );
   }
 
@@ -454,31 +433,18 @@ class _AdminInventoryFormPageState extends State<AdminInventoryFormPage> {
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
-        fillColor: AppColors.surfaceMuted,
+        fillColor: AdminTheme.canvas,
         filled: true,
       ),
       readOnly: true,
-      style: const TextStyle(color: AppColors.textSecondary),
+      style: const TextStyle(color: AdminTheme.textSecondary),
     );
   }
 
   Widget _buildBlockingError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 48, color: AppColors.primary),
-            const SizedBox(height: 12),
-            Text(
-              _error ?? 'Bạn không có quyền chỉnh sửa tồn kho.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      ),
+    return AdminStateView(
+      icon: Icons.lock_rounded,
+      title: _error ?? 'Bạn không có quyền chỉnh sửa tồn kho.',
     );
   }
 }
