@@ -19,6 +19,8 @@ class BookingPage extends StatefulWidget {
   const BookingPage({
     super.key,
     this.initialBranch,
+    this.initialCourtId,
+    this.isStandalone = false,
     this.branchApi,
     this.bookingApi,
     this.onTimelineVisibilityChanged,
@@ -27,6 +29,8 @@ class BookingPage extends StatefulWidget {
   });
 
   final Branch? initialBranch;
+  final String? initialCourtId;
+  final bool isStandalone;
   final BranchApi? branchApi;
   final BookingApi? bookingApi;
   final ValueChanged<bool>? onTimelineVisibilityChanged;
@@ -50,6 +54,8 @@ class _BookingPageState extends State<BookingPage> {
   bool _checkingLogin = false;
   final TokenStorage _tokenStorage = TokenStorage();
   double _zoom = 1;
+  final ScrollController _verticalScrollController = ScrollController();
+  bool _hasScrolledToInitialCourt = false;
 
   String get _dateKey =>
       '${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
@@ -87,6 +93,12 @@ class _BookingPageState extends State<BookingPage> {
         }
       }),
     );
+  }
+
+  @override
+  void dispose() {
+    _verticalScrollController.dispose();
+    super.dispose();
   }
 
   void _chooseBranch(Branch branch, {bool notify = true}) {
@@ -448,7 +460,12 @@ class _BookingPageState extends State<BookingPage> {
   Widget _timelinePage() => PopScope(
     canPop: false,
     onPopInvokedWithResult: (didPop, result) {
-      if (!didPop) _backToBranches();
+      if (didPop) return;
+      if (widget.isStandalone) {
+        Navigator.of(context).pop();
+      } else {
+        _backToBranches();
+      }
     },
     child: Scaffold(
       backgroundColor: AppColors.background,
@@ -456,7 +473,15 @@ class _BookingPageState extends State<BookingPage> {
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
         leading: IconButton(
-          onPressed: _submitting ? null : _backToBranches,
+          onPressed: _submitting
+              ? null
+              : () {
+                  if (widget.isStandalone) {
+                    Navigator.of(context).pop();
+                  } else {
+                    _backToBranches();
+                  }
+                },
           icon: const Icon(Icons.arrow_back),
         ),
         title: Column(
@@ -570,13 +595,32 @@ class _BookingPageState extends State<BookingPage> {
                     _refresh,
                   );
                 }
+                if (!_hasScrolledToInitialCourt && widget.initialCourtId != null) {
+                  _hasScrolledToInitialCourt = true;
+                  final courtIndex = schedules.indexWhere((s) => s.court.id == widget.initialCourtId);
+                  if (courtIndex != -1) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_verticalScrollController.hasClients) {
+                        final targetOffset = courtIndex * 64.0;
+                        _verticalScrollController.animateTo(
+                          targetOffset.clamp(0.0, _verticalScrollController.position.maxScrollExtent),
+                          duration: const Duration(milliseconds: 500),
+                          curve: Curves.easeInOutCubic,
+                        );
+                      }
+                    });
+                  }
+                }
+
                 return SingleChildScrollView(
+                  controller: _verticalScrollController,
                   child: Column(
                     children: [
                       BookingTimeline(
                         schedules: schedules,
                         selectedCourtIds: _courtSlots.keys.toSet(),
                         selectedSlotKeys: _selected.keys.toSet(),
+                        focusedCourtId: widget.initialCourtId,
                         date: _date,
                         zoom: _zoom,
                         onSlotTap: _submitting ? null : _toggle,

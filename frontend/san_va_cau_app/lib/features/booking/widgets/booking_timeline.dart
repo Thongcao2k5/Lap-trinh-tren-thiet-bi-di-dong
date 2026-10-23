@@ -25,6 +25,7 @@ class BookingTimeline extends StatelessWidget {
     this.onSlotTap,
     this.onCourtInfo,
     this.onRetry,
+    this.focusedCourtId,
   });
 
   final List<CourtSchedule> schedules;
@@ -35,6 +36,7 @@ class BookingTimeline extends StatelessWidget {
   final void Function(Court court, BookingSlot slot)? onSlotTap;
   final ValueChanged<Court>? onCourtInfo;
   final VoidCallback? onRetry;
+  final String? focusedCourtId;
   static const _rowHeight = 64.0;
   static const _labelWidth = 88.0;
   static const _headerHeight = 40.0;
@@ -54,6 +56,74 @@ class BookingTimeline extends StatelessWidget {
     _minutes(slot.startTime) ~/ 60,
     _minutes(slot.startTime) % 60,
   ).isBefore(DateTime.now());
+
+  Widget _buildCourtLabel(CourtSchedule schedule) {
+    final isFocused = schedule.court.id == focusedCourtId;
+    final isSelected = selectedCourtIds.contains(schedule.court.id);
+    return Container(
+      height: _rowHeight,
+      decoration: BoxDecoration(
+        color: isFocused
+            ? AppColors.primarySoft
+            : isSelected
+                ? AppColors.primarySoft
+                : AppColors.surface,
+        border: Border(
+          left: isFocused
+              ? const BorderSide(color: AppColors.primary, width: 4)
+              : BorderSide.none,
+          bottom: const BorderSide(color: AppColors.borderMuted),
+          right: const BorderSide(color: AppColors.borderMuted),
+        ),
+      ),
+      child: InkWell(
+        onTap: onCourtInfo == null ? null : () => onCourtInfo!(schedule.court),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                schedule.court.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isFocused ? FontWeight.w800 : FontWeight.w600,
+                  color: isFocused ? AppColors.primary : AppColors.textPrimary,
+                ),
+              ),
+              if (isFocused)
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Đang xem',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: AppColors.primaryDark,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,47 +179,7 @@ class BookingTimeline extends StatelessWidget {
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
-              for (final schedule in schedules)
-                Container(
-                  height: _rowHeight,
-                  decoration: BoxDecoration(
-                    color: selectedCourtIds.contains(schedule.court.id)
-                        ? AppColors.primarySoft
-                        : AppColors.surface,
-                    border: const Border(
-                      bottom: BorderSide(color: AppColors.borderMuted),
-                      right: BorderSide(color: AppColors.borderMuted),
-                    ),
-                  ),
-                  child: InkWell(
-                    onTap: onCourtInfo == null
-                        ? null
-                        : () => onCourtInfo!(schedule.court),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            schedule.court.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Icon(
-                            Icons.info_outline,
-                            size: 14,
-                            color: AppColors.primaryDark,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              for (final schedule in schedules) _buildCourtLabel(schedule),
             ],
           ),
         ),
@@ -192,12 +222,17 @@ class BookingTimeline extends StatelessWidget {
                         children: [
                           Positioned.fill(
                             child: Container(
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF9CA3AF),
+                              decoration: BoxDecoration(
+                                color: schedule.court.id == focusedCourtId
+                                    ? AppColors.primarySoft.withValues(alpha: 0.25)
+                                    : const Color(0xFF9CA3AF),
                                 border: Border(
-                                  bottom: BorderSide(
-                                    color: AppColors.borderMuted,
-                                  ),
+                                  top: schedule.court.id == focusedCourtId
+                                      ? const BorderSide(color: AppColors.primary, width: 1.5)
+                                      : BorderSide.none,
+                                  bottom: schedule.court.id == focusedCourtId
+                                      ? const BorderSide(color: AppColors.primary, width: 1.5)
+                                      : const BorderSide(color: AppColors.borderMuted),
                                 ),
                               ),
                             ),
@@ -229,8 +264,8 @@ class BookingTimeline extends StatelessWidget {
                                 bottom: 0,
                                 child: IgnorePointer(
                                   child: Container(
-                                    width: .5,
-                                    color: const Color(0xFFCBD5E1),
+                                    width: 1,
+                                    color: Colors.white.withValues(alpha: .25),
                                   ),
                                 ),
                               ),
@@ -253,19 +288,19 @@ class BookingTimeline extends StatelessWidget {
     int start,
     double pixelsPerMinute,
   ) {
-    final isPast = _past(slot);
-    final selected =
-        selectedCourtIds.contains(court.id) &&
-        selectedSlotKeys.contains('${court.id}:${slot.timeSlotId}');
-    final disabled = slot.isBooked || isPast || court.status != 'ACTIVE';
-    final color = slot.isBooked
+    final past = _past(slot);
+    final disabled = past || slot.isBooked;
+    final selected = selectedSlotKeys.contains('${court.id}:${slot.timeSlotId}');
+    final color = past
+        ? const Color(0xFFE2E8F0)
+        : slot.isBooked
         ? AppColors.info
-        : disabled
-        ? const Color(0xFF9CA3AF)
         : selected
         ? AppColors.primary
         : Colors.white;
-    final state = slot.isBooked
+    final state = past
+        ? 'Đã qua'
+        : slot.isBooked
         ? 'Đã đặt'
         : disabled
         ? 'Khóa'

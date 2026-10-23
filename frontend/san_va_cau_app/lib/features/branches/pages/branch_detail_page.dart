@@ -5,17 +5,22 @@ import '../../../core/widgets/app_image.dart';
 import '../../booking/data/booking_api.dart';
 import '../../booking/models/court.dart';
 import '../models/branch.dart';
+import '../../../core/utils/url_util.dart';
+import '../../booking/pages/booking_page.dart';
+import '../data/branch_api.dart';
 
 class BranchDetailPage extends StatefulWidget {
   const BranchDetailPage({
     super.key,
     required this.branch,
     this.onBookPressed,
+    this.branchApi,
     this.bookingApi,
   });
 
   final Branch branch;
   final VoidCallback? onBookPressed;
+  final BranchApi? branchApi;
   final BookingApi? bookingApi;
 
   @override
@@ -30,6 +35,24 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
     super.initState();
     final api = widget.bookingApi ?? BookingApi();
     _courtsFuture = api.getCourts(branchId: widget.branch.id);
+  }
+
+  void _openBookingSchedule({Court? court}) {
+    if (widget.onBookPressed != null) {
+      widget.onBookPressed!();
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BookingPage(
+          initialBranch: widget.branch,
+          initialCourtId: court?.id,
+          isStandalone: true,
+          branchApi: widget.branchApi,
+          bookingApi: widget.bookingApi,
+        ),
+      ),
+    );
   }
 
   String _shortTime(String value) {
@@ -73,13 +96,7 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
           child: SizedBox(
             height: 54,
             child: FilledButton.icon(
-              onPressed: () {
-                if (widget.onBookPressed != null) {
-                  widget.onBookPressed!();
-                } else {
-                  Navigator.of(context).pop(branch);
-                }
-              },
+              onPressed: () => _openBookingSchedule(),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
@@ -98,26 +115,26 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 24),
         children: [
           // Hero banner with 16:9 ratio and cover fit
           AspectRatio(
             aspectRatio: 16 / 9,
             child: ClipRect(
-              child: Transform.scale(
-                scale: 1.1,
-                child: AppImage(
-                  source: branch.imageUrl ?? '',
-                  fit: BoxFit.cover,
-                  fallback: Container(
-                    color: AppColors.primarySoft,
-                    child: const Center(
-                      child: Icon(
-                        Icons.storefront_rounded,
-                        size: 56,
-                        color: AppColors.primary,
-                      ),
+              child: AppImage(
+                source: branch.imageUrl ?? '',
+                fit: BoxFit.cover,
+                fallback: Container(
+                  color: AppColors.primarySoft,
+                  child: const Center(
+                    child: Icon(
+                      Icons.storefront_rounded,
+                      size: 56,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
@@ -219,6 +236,8 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
                         icon: Icons.location_on_rounded,
                         label: 'Địa chỉ',
                         value: branch.address,
+                        iconSize: 26,
+                        onTap: () => openMapSafely(context, branch.resolvedMapUrl),
                       ),
                       const SizedBox(height: 16),
                       _DetailInfoItem(
@@ -330,7 +349,6 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
                         for (final court in courts) ...[
                           Container(
                             margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: AppColors.surface,
                               borderRadius: BorderRadius.circular(14),
@@ -343,52 +361,75 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
                                 ),
                               ],
                             ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primarySoft,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.sports_tennis_rounded,
-                                    color: AppColors.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                hoverColor: AppColors.primarySoft.withValues(alpha: 0.5),
+                                splashColor: AppColors.primarySoft,
+                                onTap: () => _openBookingSchedule(court: court),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        court.name,
-                                        style: const TextStyle(
-                                          color: AppColors.textPrimary,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14,
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primarySoft,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                          Icons.sports_tennis_rounded,
+                                          color: AppColors.primary,
+                                          size: 20,
                                         ),
                                       ),
-                                      if (court.description?.isNotEmpty ==
-                                          true) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          court.description!,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: AppColors.textSecondary,
-                                            fontSize: 12,
-                                          ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              court.name,
+                                              style: const TextStyle(
+                                                color: AppColors.textPrimary,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            if (court.description?.isNotEmpty ==
+                                                true) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                court.description!,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: AppColors.textSecondary,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ),
-                                      ],
+                                      ),
+                                      const Icon(
+                                        Icons.calendar_month_outlined,
+                                        size: 20,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.arrow_forward_ios_rounded,
+                                        size: 14,
+                                        color: AppColors.textSecondary,
+                                      ),
                                     ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ],
@@ -400,6 +441,8 @@ class _BranchDetailPageState extends State<BranchDetailPage> {
             ),
           ),
         ],
+          ),
+        ),
       ),
     );
   }
@@ -410,15 +453,19 @@ class _DetailInfoItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.iconSize = 20,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final double iconSize;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final rowContent = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
@@ -428,7 +475,7 @@ class _DetailInfoItem extends StatelessWidget {
             color: AppColors.primarySoft,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
+          child: Icon(icon, color: AppColors.primary, size: iconSize),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -458,5 +505,23 @@ class _DetailInfoItem extends StatelessWidget {
         ),
       ],
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          hoverColor: AppColors.primarySoft.withValues(alpha: 0.5),
+          splashColor: AppColors.primarySoft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: rowContent,
+          ),
+        ),
+      );
+    }
+
+    return rowContent;
   }
 }

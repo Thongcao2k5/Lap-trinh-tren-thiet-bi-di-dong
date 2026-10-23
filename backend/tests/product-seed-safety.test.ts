@@ -123,3 +123,20 @@ test("an existing product with different legacy SKU, price and stock is skipped 
   assert.equal(db.categories.length, 0);
   assert.equal(db.brands.length, 0);
 });
+
+
+test("fullProductCatalog contains 25 products and 47 variants; Express app serves all 25 images", async () => {
+  const { fullProductCatalog } = await import("../src/database/seeds/product-seeder.js");
+  assert.equal(fullProductCatalog.length, 25);
+  const variants = fullProductCatalog.flatMap((p) => p.variants);
+  assert.equal(variants.length, 47);
+  assert.equal(new Set(variants.map((v) => v.sku)).size, 47);
+  assert.ok(fullProductCatalog.every((p) => p.imageUrl !== null));
+  const { app } = await import("../src/app.js");
+  const request = (await import("supertest")).default;
+  for (const p of fullProductCatalog) {
+    const res = await request(app).get(p.imageUrl!);
+    assert.equal(res.status, 200, `Failed to serve image for ${p.name}: ${p.imageUrl}`);
+    assert.ok(res.headers["content-type"]?.startsWith("image/"));
+  }
+});

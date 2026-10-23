@@ -65,6 +65,13 @@ const toBranchResponse = (branch: {
   phone: branch.phone,
   description: branch.description,
   imageUrl: branch.image_url,
+  mapUrl: (branch.name.includes("Quận 1") || branch.address.includes("Minh Khai"))
+    ? "https://www.google.com/maps/search/?api=1&query=S%C3%A2n+c%E1%BA%A7u+l%C3%B4ng+Cung+V%C4%83n+h%C3%B3a+Lao+%C4%91%E1%BB%99ng%2C+55B+Nguy%E1%BB%85n+Th%E1%BB%8B+Minh+Khai%2C+Ph%C6%B0%E1%BB%9Dng+B%E1%BA%BFn+Th%C3%A0nh%2C+Qu%E1%BA%ADn+1%2C+TP.+H%E1%BB%93+Ch%C3%AD+Minh"
+    : (branch.name.includes("Thủ Đức") || branch.address.includes("Trường Thọ"))
+    ? "https://maps.app.goo.gl/kqmA3zLPSBjaM7496"
+    : (branch.name.includes("Bình Thạnh") || branch.address.includes("Bình Quới"))
+    ? "https://maps.app.goo.gl/MqZCMWV2ptLosZ7YA"
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(branch.address || branch.name)}`,
   isFeatured: branch.is_featured,
   sortOrder: branch.sort_order,
   openingTime: formatTime(branch.opening_time),

@@ -82,3 +82,23 @@ export const productCatalog = products.map((item, index) => {
     { sku: item.sku, variantName: "Tiêu chuẩn", price: item.price, quantity: 20 }, ...variants,
   ] };
 });
+
+export const legacyApprovedProducts = products.map((item) => ({
+  name: item.name,
+  category: item.category,
+  brand: item.brand,
+  price: item.price,
+  sku: item.sku,
+  featured: item.featured,
+  imageUrl: productImages[item.name]?.imageUrl ?? null,
+  imageEvidence: productImages[item.name]?.imageEvidence,
+  description: `Sản phẩm demo ${item.name} cho SanVaCau. Giá bán và tồn kho là dữ liệu demo phục vụ đồ án, không phải báo giá hoặc tồn kho thực tế của hãng.`,
+  variants: [
+    {
+      sku: item.sku,
+      variantName: "Tiêu chuẩn",
+      price: item.price,
+      quantity: 20,
+    },
+  ],
+}));
