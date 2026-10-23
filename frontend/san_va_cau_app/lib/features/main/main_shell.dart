@@ -9,8 +9,8 @@ import '../../core/theme/app_colors.dart';
 import '../auth/pages/account_page.dart';
 import '../auth/data/auth_api.dart';
 import '../booking/data/booking_api.dart';
-import '../booking/pages/booking_page.dart';
 import '../branches/data/branch_api.dart';
+import '../branches/pages/branch_detail_page.dart';
 import '../branches/pages/branch_list_page.dart';
 import '../branches/models/branch.dart';
 import '../cart/pages/cart_page.dart';
@@ -96,9 +96,6 @@ class _MainShellState extends State<MainShell> {
   final NotchBottomBarController _navigationController =
       NotchBottomBarController();
   int _currentIndex = 0;
-  Branch? _bookingBranch;
-  int _bookingRevision = 0;
-  bool _bookingTimelineVisible = false;
   bool _cartCheckoutVisible = false;
   int _accountRevision = 0;
   bool _exitArmed = false;
@@ -138,16 +135,15 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openBookingForBranch(Branch branch) {
-    if (_navigationController.index != 2) {
-      _navigationController.jumpTo(2);
-    }
-    setState(() {
-      _bookingBranch = branch;
-      _resetExitConfirmation();
-      _bookingTimelineVisible = true;
-      _bookingRevision++;
-      _currentIndex = 2;
-    });
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BranchDetailPage(
+          branch: branch,
+          branchApi: widget.branchApi,
+          bookingApi: widget.bookingApi,
+        ),
+      ),
+    );
   }
 
   void _onCartSelectionChanged(bool hasSelection) {
@@ -170,25 +166,20 @@ class _MainShellState extends State<MainShell> {
         .push(MaterialPageRoute<void>(builder: (_) => const NewsListPage()));
   }
 
-  Future<void> _openBranchPage() async {
-    final branch = await Navigator.of(context).push<Branch>(
-      MaterialPageRoute<Branch>(
+  void _openBranchPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
         builder: (_) => BranchListPage(
           branchApi: widget.branchApi,
           bookingApi: widget.bookingApi,
         ),
       ),
     );
-    if (branch != null && mounted) {
-      _openBookingForBranch(branch);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final timelineVisible = _currentIndex == 2 && _bookingTimelineVisible;
-    final cartCheckoutVisible = _currentIndex == 3 && _cartCheckoutVisible;
-    final hideBottomNavigation = timelineVisible || cartCheckoutVisible;
+    final hideBottomNavigation = _currentIndex == 3 && _cartCheckoutVisible;
     final pages = [
       HomePage(
         onBookCourtPressed: () => _onTabSelected(2),
@@ -198,20 +189,9 @@ class _MainShellState extends State<MainShell> {
         onBookBranchPressed: _openBookingForBranch,
       ),
       ProductListPage(onCartPressed: () => _onTabSelected(3)),
-      BookingPage(
-        key: ValueKey('booking-${_bookingBranch?.id}-$_bookingRevision'),
-        initialBranch: _bookingBranch,
+      BranchListPage(
         branchApi: widget.branchApi,
         bookingApi: widget.bookingApi,
-        authApi: widget.authApi,
-        onTimelineVisibilityChanged: (visible) {
-          if (_bookingTimelineVisible != visible) {
-            setState(() {
-              _resetExitConfirmation();
-              _bookingTimelineVisible = visible;
-            });
-          }
-        },
       ),
       CartPage(
         cartApi: widget.cartApi,
@@ -225,10 +205,9 @@ class _MainShellState extends State<MainShell> {
     ];
 
     return PopScope(
-      canPop: !timelineVisible && (!widget.confirmExitOnBack || _exitArmed),
+      canPop: !widget.confirmExitOnBack || _exitArmed,
       onPopInvokedWithResult: (didPop, result) {
-        // The timeline handles Back by returning to the branch list.
-        if (!didPop && !timelineVisible && widget.confirmExitOnBack) {
+        if (!didPop && widget.confirmExitOnBack) {
           _confirmExit();
         }
       },

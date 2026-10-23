@@ -1,13 +1,20 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { productCatalog } from "./product-catalog.js";
+import { legacyApprovedProducts, productCatalog } from "./product-catalog.js";
+import { readyProductCatalog } from "./product-targets.js";
 import { assertProductSeedDatabase, assertProductSeedIdentity } from "./product-seed-safety.js";
 
 export type ProductSeedItem = Omit<(typeof productCatalog)[number], "imageUrl"> & {
   imageUrl: string | null;
   description?: string;
+  imageEvidence?: { sourceUrl: string; permissionEvidence: string; sha256: string };
 };
 type SeedOptions = { preserveExistingProducts?: boolean; createMissingRelations?: boolean };
+
+export const fullProductCatalog: ProductSeedItem[] = [
+  ...legacyApprovedProducts,
+  ...readyProductCatalog,
+];
 
 // Shared by the transaction runner and in-memory repeatability tests.
 export async function seedProductRows(
@@ -67,7 +74,7 @@ export async function seedProductRows(
 }
 
 export const seedProducts = async (
-  catalog: readonly ProductSeedItem[] = productCatalog,
+  catalog: readonly ProductSeedItem[] = fullProductCatalog,
   options: SeedOptions = {},
 ) => {
   assertProductSeedDatabase(process.env.DATABASE_URL);

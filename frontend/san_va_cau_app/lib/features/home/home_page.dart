@@ -169,16 +169,12 @@ class _HomePageState extends State<HomePage> {
                         )
                         .toList(),
                     onViewAllPressed: widget.onViewBranchesPressed,
-                    onBranchPressed: (branch) async {
-                      final selectedBranch = await Navigator.of(context)
-                          .push<Branch>(
-                            MaterialPageRoute<Branch>(
-                              builder: (_) => BranchDetailPage(branch: branch),
-                            ),
-                          );
-                      if (selectedBranch != null && context.mounted) {
-                        widget.onBookBranchPressed(selectedBranch);
-                      }
+                    onBranchPressed: (branch) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BranchDetailPage(branch: branch),
+                        ),
+                      );
                     },
                   ),
                 ),

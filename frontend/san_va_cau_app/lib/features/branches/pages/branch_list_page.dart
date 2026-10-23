@@ -7,6 +7,7 @@ import '../../booking/data/booking_api.dart';
 import 'branch_detail_page.dart';
 import '../data/branch_api.dart';
 import '../models/branch.dart';
+import '../../../core/utils/url_util.dart';
 
 class BranchListPage extends StatefulWidget {
   const BranchListPage({this.branchApi, this.bookingApi, super.key});
@@ -58,16 +59,16 @@ class _BranchListPageState extends State<BranchListPage> {
     setState(() => _searchQuery = '');
   }
 
-  Future<void> _openBranchDetail(Branch branch) async {
-    final selectedBranch = await Navigator.of(context).push<Branch>(
-      MaterialPageRoute<Branch>(
-        builder: (_) =>
-            BranchDetailPage(branch: branch, bookingApi: widget.bookingApi),
+  void _openBranchDetail(Branch branch) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BranchDetailPage(
+          branch: branch,
+          branchApi: _branchApi,
+          bookingApi: widget.bookingApi,
+        ),
       ),
     );
-    if (selectedBranch != null && mounted) {
-      Navigator.of(context).pop(selectedBranch);
-    }
   }
 
   @override
@@ -255,9 +256,14 @@ class _BranchListPageState extends State<BranchListPage> {
                               const SizedBox(height: 16),
                           itemBuilder: (context, index) {
                             final branch = filteredBranches[index];
-                            return _BranchCard(
-                              branch: branch,
-                              onTap: () => _openBranchDetail(branch),
+                            return Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 680),
+                                child: _BranchCard(
+                                  branch: branch,
+                                  onTap: () => _openBranchDetail(branch),
+                                ),
+                              ),
                             );
                           },
                         ),
@@ -308,14 +314,16 @@ class _BranchCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top image with active badge overlay (ratio 16:8)
-                AspectRatio(
-                  aspectRatio: 16 / 8,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Transform.scale(
-                        scale: 1.1,
-                        child: AppImage(
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(18),
+                  ),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 8,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AppImage(
                           source: branch.imageUrl ?? '',
                           fit: BoxFit.cover,
                           fallback: Container(
@@ -329,7 +337,6 @@ class _BranchCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      ),
                       Positioned(
                         top: 10,
                         right: 10,
@@ -375,6 +382,7 @@ class _BranchCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  ),
                 ),
 
                 // Card details
@@ -393,31 +401,43 @@ class _BranchCard extends StatelessWidget {
                             ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 2),
-                            child: Icon(
-                              Icons.location_on_rounded,
-                              size: 16,
-                              color: AppColors.primary,
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => openMapSafely(context, branch.resolvedMapUrl),
+                          borderRadius: BorderRadius.circular(8),
+                          hoverColor: AppColors.primarySoft.withValues(alpha: 0.5),
+                          splashColor: AppColors.primarySoft,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 1),
+                                  child: Icon(
+                                    Icons.location_on_rounded,
+                                    size: 26,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    branch.address,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              branch.address,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Row(

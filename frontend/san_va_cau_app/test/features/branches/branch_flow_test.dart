@@ -6,6 +6,7 @@ import 'package:san_va_cau_app/features/branches/data/branch_api.dart';
 import 'package:san_va_cau_app/features/branches/models/branch.dart';
 import 'package:san_va_cau_app/features/branches/pages/branch_detail_page.dart';
 import 'package:san_va_cau_app/features/branches/pages/branch_list_page.dart';
+import 'package:san_va_cau_app/features/booking/pages/booking_page.dart';
 
 const _testBranch1 = Branch(
   id: 'branch-101',
@@ -47,23 +48,35 @@ class _TestBookingApi extends BookingApi {
       status: 'ACTIVE',
     ),
   ];
+
+  @override
+  Future<List<BookingSlot>> getAvailability({
+    required String courtId,
+    required String date,
+  }) async => const [
+    BookingSlot(
+      timeSlotId: 'slot-1',
+      startTime: '06:00:00',
+      endTime: '06:30:00',
+      price: 50000,
+      isBooked: false,
+    ),
+  ];
 }
 
 void main() {
   group('BranchListPage & BranchDetailPage redesign flows', () {
     testWidgets(
-      'cards render branch details, tapping opens BranchDetailPage, and Đặt sân ngay returns branch',
+      'cards render branch details, tapping opens BranchDetailPage, and unified navigation flow works',
       (tester) async {
-        Branch? returnedBranch;
-
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
               builder: (context) => Scaffold(
                 body: ElevatedButton(
-                  onPressed: () async {
-                    returnedBranch = await Navigator.of(context).push<Branch>(
-                      MaterialPageRoute<Branch>(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
                         builder: (_) => BranchListPage(
                           branchApi: _TestBranchApi(),
                           bookingApi: _TestBookingApi(),
@@ -108,17 +121,46 @@ void main() {
         expect(find.text('Sân VIP 1'), findsOneWidget);
         expect(find.text('Sân thảm tiêu chuẩn BWF'), findsOneWidget);
 
-        // CTA Đặt sân ngay
+        // CTA Đặt sân ngay pushes BookingPage
         final cta = find.widgetWithText(FilledButton, 'Đặt sân ngay');
         expect(cta, findsOneWidget);
 
         await tester.tap(cta);
         await tester.pumpAndSettle();
 
-        // Stack popped and returned branch
+        // Pushed to BookingPage with timeline
+        expect(find.byType(BookingPage), findsOneWidget);
+        expect(find.text('Đặt lịch theo sân'), findsOneWidget);
+
+        // Back from BookingPage returns to BranchDetailPage
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BookingPage), findsNothing);
+        expect(find.byType(BranchDetailPage), findsOneWidget);
+
+        // Tapping a court card opens BookingPage focused on that court
+        await tester.ensureVisible(find.text('Sân VIP 1'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sân VIP 1'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BookingPage), findsOneWidget);
+        expect(find.text('Đang xem'), findsOneWidget);
+
+        // Back again returns to BranchDetailPage
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BookingPage), findsNothing);
+        expect(find.byType(BranchDetailPage), findsOneWidget);
+
+        // Back from BranchDetailPage returns to BranchListPage
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
         expect(find.byType(BranchDetailPage), findsNothing);
-        expect(find.byType(BranchListPage), findsNothing);
-        expect(returnedBranch?.id, 'branch-101');
+        expect(find.byType(BranchListPage), findsOneWidget);
       },
     );
 

@@ -12,6 +12,9 @@ import 'package:san_va_cau_app/features/branches/models/branch.dart';
 import 'package:san_va_cau_app/features/cart/data/cart_api.dart';
 import 'package:san_va_cau_app/features/cart/models/cart.dart';
 import 'package:san_va_cau_app/features/main/main_shell.dart';
+import 'package:san_va_cau_app/features/booking/pages/booking_page.dart';
+import 'package:san_va_cau_app/features/branches/pages/branch_detail_page.dart';
+import 'package:san_va_cau_app/features/branches/pages/branch_list_page.dart';
 
 const _shellBranch = Branch(
   id: 'shell-branch-1',
@@ -42,7 +45,15 @@ class _NavigationBookingApi extends BookingApi {
   Future<List<BookingSlot>> getAvailability({
     required String courtId,
     required String date,
-  }) async => const [];
+  }) async => const [
+    BookingSlot(
+      timeSlotId: 'slot-shell-1',
+      startTime: '06:00:00',
+      endTime: '06:30:00',
+      price: 50000,
+      isBooked: false,
+    ),
+  ];
 }
 
 class _NavigationCartApi extends CartApi {
@@ -311,29 +322,108 @@ void main() {
         await tester.tap(find.widgetWithText(FilledButton, 'Đặt sân ngay'));
         await tester.pumpAndSettle();
 
-        // Should return to MainShell, switched to Booking tab (index 2)
-        final indexedStack = tester.widget<IndexedStack>(
-          find.byType(IndexedStack),
-        );
-        expect(indexedStack.index, 2);
-
-        // Timeline is active for that branch, user is not asked to pick branch again
+        // Pushes BookingPage for that branch without jumping/destroying branch stack
+        expect(find.byType(BookingPage), findsOneWidget);
         expect(find.text('Chi nhánh Landmark'), findsOneWidget);
-        expect(find.text('Bạn muốn chơi ở đâu?'), findsNothing);
 
-        // Bottom navigation is hidden while viewing the booking timeline
-        expect(find.byType(AnimatedNotchBottomBar), findsNothing);
-
-        // Back from timeline returns to branch picker in Booking tab and reveals bottom navigation
+        // Back from timeline returns to BranchDetailPage
         await tester.tap(find.byIcon(Icons.arrow_back));
         await tester.pumpAndSettle();
 
-        expect(find.text('Bạn muốn chơi ở đâu?'), findsOneWidget);
-        expect(find.byType(AnimatedNotchBottomBar), findsOneWidget);
-        final currentStack = tester.widget<IndexedStack>(
-          find.byType(IndexedStack),
+        expect(find.byType(BookingPage), findsNothing);
+        expect(find.byType(BranchDetailPage), findsOneWidget);
+
+        // Back from BranchDetailPage returns to BranchListPage
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BranchDetailPage), findsNothing);
+        expect(find.byType(BranchListPage), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tapping Dat san tab displays BranchListPage directly, supports court selection to BookingPage, back navigation, and clean tab switching',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MainShell(
+              authApi: _SessionAuth(),
+              cartApi: _NavigationCartApi(),
+              branchApi: _NavigationBranchApi(),
+              bookingApi: _NavigationBookingApi(),
+            ),
+          ),
         );
-        expect(currentStack.index, 2);
+        await tester.pump();
+        tester.takeException();
+        await tester.pumpAndSettle();
+
+        // Tap on "Đặt sân" tab in the bottom navigation bar
+        await tester.tap(find.text('Đặt sân').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        // Verifies BranchListPage is directly displayed (NOT legacy BookingPage branch selector)
+        expect(find.byType(BranchListPage), findsOneWidget);
+        expect(find.byType(BookingPage), findsNothing);
+        expect(find.text('Bạn muốn chơi ở đâu?'), findsNothing);
+        expect(find.text('Chi nhánh Landmark'), findsOneWidget);
+
+        // Drag up to make sure branch card is clear of the bottom notch bar
+        await tester.drag(find.byType(BranchListPage), const Offset(0, -150));
+        await tester.pumpAndSettle();
+
+        // Tap branch to open BranchDetailPage
+        await tester.tap(find.text('Chi nhánh Landmark'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BranchDetailPage), findsOneWidget);
+        expect(find.text('Sân Trung Tâm'), findsOneWidget);
+
+        // Scroll to court card and tap to open BookingPage focused on that court
+        await tester.ensureVisible(find.text('Sân Trung Tâm'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sân Trung Tâm'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BookingPage), findsOneWidget);
+        expect(find.text('Đặt lịch theo sân'), findsOneWidget);
+        expect(find.text('Đang xem'), findsOneWidget);
+
+        // Back from BookingPage returns to BranchDetailPage
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BookingPage), findsNothing);
+        expect(find.byType(BranchDetailPage), findsOneWidget);
+
+        // Back from BranchDetailPage returns to BranchListPage on Tab 2
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BranchDetailPage), findsNothing);
+        expect(find.byType(BranchListPage), findsOneWidget);
+
+        // Switch to "Sản phẩm" tab (index 1)
+        await tester.tap(find.text('Sản phẩm').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        final indexedStack =
+            tester.widget<IndexedStack>(find.byType(IndexedStack));
+        expect(indexedStack.index, 1);
+
+        // Switch back to "Đặt sân" tab (index 2)
+        await tester.tap(find.text('Đặt sân').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        // Verifies no old UI, no stale BookingPage, no duplicate routes
+        expect(find.byType(BranchListPage), findsOneWidget);
+        expect(find.byType(BookingPage), findsNothing);
+        expect(find.byType(BranchDetailPage), findsNothing);
+        expect(find.text('Bạn muốn chơi ở đâu?'), findsNothing);
       },
     );
   });
