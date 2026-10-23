@@ -22,7 +22,7 @@ const parseDateOnly = (value: unknown) => {
 
   const date = new Date(`${value}T00:00:00.000Z`);
 
-  return date.toISOString().slice(0, 10) === value ? date : null;
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date : null;
 };
 
 const bookingInclude = {
@@ -115,7 +115,7 @@ bookingRouter.get("/availability", async (req, res, next) => {
       },
       orderBy: {
         time_slot: {
-          sort_order: "asc",
+          start_time: "asc",
         },
       },
     });
@@ -130,6 +130,7 @@ bookingRouter.get("/availability", async (req, res, next) => {
           },
         },
       },
+      include: { time_slot: true },
     });
 
     const bookedSlotIds = new Set(bookingSlots.map((bs) => bs.time_slot_id.toString()));
@@ -139,7 +140,8 @@ bookingRouter.get("/availability", async (req, res, next) => {
       startTime: cp.time_slot.start_time.toISOString().slice(11, 19),
       endTime: cp.time_slot.end_time.toISOString().slice(11, 19),
       price: cp.price.toString(),
-      isBooked: bookedSlotIds.has(cp.time_slot.id.toString()),
+      isBooked: bookedSlotIds.has(cp.time_slot.id.toString()) || bookingSlots.some(bs =>
+        bs.time_slot.start_time < cp.time_slot.end_time && bs.time_slot.end_time > cp.time_slot.start_time),
     }));
 
     res.json({
@@ -157,6 +159,88 @@ bookingRouter.get("/availability", async (req, res, next) => {
       return;
     }
 
+    next(error);
+  }
+});
+
+class BatchBookingError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+// One confirmation creates one booking per court, committed together.
+bookingRouter.post('/batch', requireAuth, requireRole('CUSTOMER'), async (req, res, next) => {
+  try {
+    const bookingDate = parseDateOnly(req.body?.bookingDate);
+    const input: unknown = req.body?.courts;
+    const paymentMethod = typeof req.body?.paymentMethod === 'string' ? req.body.paymentMethod : null;
+    if (!bookingDate || !Array.isArray(input) || input.length === 0) {
+      throw new BatchBookingError(400, 'bookingDate and non-empty courts are required');
+    }
+    const seen = new Set<string>();
+    const selections = input.map((entry: unknown) => {
+      if (!entry || typeof entry !== 'object') throw new BatchBookingError(400, 'Invalid court selection');
+      const item = entry as Record<string, unknown>;
+      const courtId = parseBigIntId(typeof item.courtId === 'string' ? item.courtId : undefined);
+      if (!courtId || seen.has(courtId.toString()) || !Array.isArray(item.timeSlotIds) || item.timeSlotIds.length === 0) {
+        throw new BatchBookingError(400, 'Invalid or duplicate court selection');
+      }
+      seen.add(courtId.toString());
+      const timeSlotIds = item.timeSlotIds.map((id: unknown) => parseBigIntId(typeof id === 'string' ? id : undefined));
+      if (timeSlotIds.some(id => !id) || new Set(timeSlotIds.map(String)).size !== timeSlotIds.length) {
+        throw new BatchBookingError(400, 'Invalid or duplicate timeSlotIds');
+      }
+      return { courtId, timeSlotIds: timeSlotIds as bigint[] };
+    });
+    const bookings = await prisma.$transaction(async tx => {
+      const results: BookingWithDetails[] = [];
+      let branchId: bigint | undefined;
+      for (const selection of selections) {
+        const court = await tx.court.findFirst({ where: { id: selection.courtId, status: 'ACTIVE' } });
+        if (!court) throw new BatchBookingError(404, 'court not found or not active');
+        if (branchId !== undefined && branchId !== court.branch_id) {
+          throw new BatchBookingError(400, 'All courts must belong to the same branch');
+        }
+        branchId = court.branch_id;
+        const prices = await tx.court_price.findMany({ where: {
+          court_id: court.id, time_slot_id: { in: selection.timeSlotIds }, time_slot: { is_active: true },
+        }, include: { time_slot: true } });
+        if (prices.length !== selection.timeSlotIds.length) {
+          throw new BatchBookingError(400, 'One or more time slots are invalid, inactive, or do not have a price');
+        }
+        const conflict = await tx.booking_slot.findFirst({ where: {
+          court_id: court.id, booking_date: bookingDate,
+          time_slot: { OR: prices.map(price => ({ start_time: { lt: price.time_slot.end_time }, end_time: { gt: price.time_slot.start_time } })) },
+          booking: { status: { not: 'CANCELLED' } },
+        } });
+        if (conflict) throw new BatchBookingError(409, 'One or more time slots are already booked');
+        const booking = await tx.booking.create({ data: {
+          customer_id: BigInt(req.user!.id), court_id: court.id, booking_date: bookingDate,
+          status: 'BOOKED', total_amount: prices.reduce((total, price) => total.add(price.price), new Prisma.Decimal(0)),
+          payment_method: paymentMethod, payment_status: 'UNPAID',
+          booking_slot: { create: prices.map(price => ({
+            court_id: court.id, booking_date: bookingDate, time_slot_id: price.time_slot_id, price_at_booking: price.price,
+          })) },
+        }, include: bookingInclude });
+        results.push(booking);
+      }
+      return results;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    res.status(201).json({ success: true, message: 'Bookings created successfully', data: { bookings: bookings.map(toBookingResponse) } });
+    for (const booking of bookings) {
+      createNotification({ userId: booking.customer_id, type: 'BOOKING_CREATED', title: 'Lịch đặt sân đã được tạo',
+        message: `Bạn đã đặt ${booking.court.name} ngày ${booking.booking_date.toISOString().slice(0, 10)}.`,
+        data: { bookingId: booking.id.toString(), courtId: booking.court_id.toString(), bookingDate: booking.booking_date.toISOString().slice(0, 10), status: booking.status },
+      });
+    }
+  } catch (error) {
+    if (error instanceof BatchBookingError) {
+      res.status(error.status).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code)) {
+      res.status(409).json({ success: false, message: 'Schedule changed. Please refresh and select your slots again.' });
+      return;
+    }
     next(error);
   }
 });
@@ -214,9 +298,7 @@ bookingRouter.post("/", requireAuth, requireRole("CUSTOMER"), async (req, res, n
     const courtPrices = await prisma.court_price.findMany({
       where: {
         court_id: courtId,
-        time_slot_id: {
-          in: timeSlotIds,
-        },
+        time_slot_id: { in: timeSlotIds },
         time_slot: {
           is_active: true,
         },
@@ -238,9 +320,7 @@ bookingRouter.post("/", requireAuth, requireRole("CUSTOMER"), async (req, res, n
       where: {
         court_id: courtId,
         booking_date: bookingDate,
-        time_slot_id: {
-          in: timeSlotIds,
-        },
+        time_slot: { OR: courtPrices.map(price => ({ start_time: { lt: price.time_slot.end_time }, end_time: { gt: price.time_slot.start_time } })) },
         booking: {
           status: {
             not: "CANCELLED",
@@ -413,6 +493,48 @@ bookingRouter.get("/", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "STA
   }
 });
 
+bookingRouter.post("/:id/collect-cash", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "STAFF"]), async (req, res, next) => {
+  try {
+    const id = parseBigIntId(req.params.id);
+    if (!id) throw new BatchBookingError(400, "Mã lịch đặt không hợp lệ.");
+    const booking = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM booking WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.booking.findUnique({ where: { id }, include: bookingInclude });
+      if (!current) throw new BatchBookingError(404, "Không tìm thấy lịch đặt.");
+      if (req.user!.role !== "ADMIN" && (!req.user!.branchId || current.court.branch_id.toString() !== req.user!.branchId)) {
+        throw new BatchBookingError(403, "Bạn không có quyền thu tiền tại chi nhánh này.");
+      }
+      if (current.status === "CANCELLED") throw new BatchBookingError(409, "Lịch đã hủy không thể thu tiền.");
+      if (current.payment_status === "PAID") return current;
+      if (current.payment_status !== "UNPAID" || (current.payment_method && current.payment_method !== "CASH")) {
+        throw new BatchBookingError(409, "Lịch này không chờ thanh toán tiền mặt.");
+      }
+      const payments = await tx.payment.findMany({ where: { target_type: "BOOKING", target_id: id, status: { in: ["PENDING", "PAID"] } } });
+      if (payments.some(payment => payment.provider !== "CASH" || payment.status === "PAID") || payments.length > 1) {
+        throw new BatchBookingError(409, "Giao dịch đang cần đối soát. Không thu tiền thêm.");
+      }
+      const now = new Date();
+      const data = { amount: current.total_amount, status: "PAID", paid_at: now, updated_at: now };
+      if (payments[0]) {
+        await tx.payment.update({ where: { id: payments[0].id }, data });
+      } else {
+        await tx.payment.create({ data: { ...data, user_id: current.customer_id, target_type: "BOOKING", target_id: id, provider: "CASH", transaction_ref: `CASH_BOOKING_${id}` } });
+      }
+      await tx.audit_log.create({ data: {
+        actor_id: BigInt(req.user!.id), actor_role: req.user!.role, action: "BOOKING_CASH_COLLECTED",
+        entity_type: "booking", entity_id: id,
+        before_data: { paymentStatus: current.payment_status },
+        after_data: { paymentStatus: "PAID", amount: current.total_amount.toString(), paidAt: now.toISOString() },
+      } });
+      return tx.booking.update({ where: { id }, data: { payment_method: "CASH", payment_status: "PAID" }, include: bookingInclude });
+    });
+    res.json({ success: true, data: toBookingResponse(booking) });
+  } catch (error) {
+    if (error instanceof BatchBookingError) { res.status(error.status).json({ success: false, message: error.message }); return; }
+    next(error);
+  }
+});
+
 // PATCH /api/bookings/:id/status
 bookingRouter.patch("/:id/status", requireAuth, requireRole(["ADMIN", "BRANCH_MANAGER", "STAFF"]), async (req, res, next) => {
   try {
@@ -471,6 +593,14 @@ bookingRouter.patch("/:id/status", requireAuth, requireRole(["ADMIN", "BRANCH_MA
     }
 
     const updatedBooking = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM booking WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.booking.findUniqueOrThrow({ where: { id } });
+      if (status === "COMPLETED" && (current.payment_status !== "PAID" || !["CHECKED_IN", "COMPLETED"].includes(current.status))) {
+        throw new BatchBookingError(409, "Cần nhận sân và xác nhận đã thu đủ tiền trước khi hoàn tất.");
+      }
+      if (["COMPLETED", "CANCELLED"].includes(current.status) && current.status !== status) {
+        throw new BatchBookingError(409, "Lịch đã kết thúc không thể đổi trạng thái.");
+      }
       if (status === "CANCELLED" && existingBooking.status !== "CANCELLED") {
         await tx.booking_slot.deleteMany({
           where: {
@@ -516,6 +646,7 @@ bookingRouter.patch("/:id/status", requireAuth, requireRole(["ADMIN", "BRANCH_MA
       },
     });
   } catch (error) {
+    if (error instanceof BatchBookingError) { res.status(error.status).json({ success: false, message: error.message }); return; }
     next(error);
   }
 });

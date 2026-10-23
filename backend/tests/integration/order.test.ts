@@ -14,6 +14,32 @@ import {
 } from "../helpers/fixtures.js";
 
 describe("Order Flow", () => {
+  it("orders only selected cart items and preserves the others", async () => {
+    const branch = await createBranch();
+    const { token } = await createCustomer();
+    await setupCart(token, branch.id, 1);
+    await setupCart(token, branch.id, 2);
+    const before = await request.get("/api/cart").set("Authorization", `Bearer ${token}`);
+    const items = before.body.data.cart.items;
+    expect(items).toHaveLength(2);
+    const result = await request.post("/api/orders")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ branchId: branch.id.toString(), cartItemIds: [items[0].id] });
+    expect(result.status).toBe(201);
+    expect(result.body.data.order.items).toHaveLength(1);
+    const after = await request.get("/api/cart").set("Authorization", `Bearer ${token}`);
+    expect(after.body.data.cart.items).toHaveLength(1);
+    expect(after.body.data.cart.items[0].id).toBe(items[1].id);
+  });
+
+  it("rejects cart selections that do not belong to the customer", async () => {
+    const branch = await createBranch();
+    const { token } = await createCustomer();
+    const result = await request.post("/api/orders")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ branchId: branch.id.toString(), cartItemIds: ["999999"] });
+    expect(result.status).toBe(400);
+  });
   beforeEach(async () => {
     await clearDatabase();
   });
@@ -40,7 +66,7 @@ describe("Order Flow", () => {
     const { token, user } = await createCustomer();
     const { variant } = await setupCart(token, branch.id, 2);
 
-    const initialInventory = await prisma.inventory.findFirst({
+    const initialInventory = await prisma.inventory.findUnique({
       where: { product_variant_id: variant.id }
     });
 
@@ -54,7 +80,7 @@ describe("Order Flow", () => {
     expect(res.body.data.order.totalAmount).toBe("100000"); // 50000 * 2
 
     // Inventory decreases
-    const postInventory = await prisma.inventory.findFirst({
+    const postInventory = await prisma.inventory.findUnique({
       where: { product_variant_id: variant.id }
     });
     expect(postInventory!.quantity).toBe(initialInventory!.quantity - 2);
@@ -75,6 +101,34 @@ describe("Order Flow", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/cart is empty/i);
+  });
+
+  it("Customer can buy one variant immediately without changing the existing cart", async () => {
+    const branch = await createBranch();
+    const { token } = await createCustomer();
+    const { variant } = await setupCart(token, branch.id, 1);
+
+    const res = await request
+      .post("/api/orders")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        branchId: branch.id.toString(),
+        items: [{ productVariantId: variant.id.toString(), quantity: 2 }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.totalAmount).toBe("100000");
+
+    const inventory = await prisma.inventory.findUnique({
+      where: { product_variant_id: variant.id },
+    });
+    expect(inventory?.quantity).toBe(8);
+
+    const cartRes = await request
+      .get("/api/cart")
+      .set("Authorization", `Bearer ${token}`);
+    expect(cartRes.body.data.cart.items).toHaveLength(1);
+    expect(cartRes.body.data.cart.items[0].quantity).toBe(1);
   });
 
   it("Reject insufficient inventory and ensure no partial data is created", async () => {
@@ -108,7 +162,7 @@ describe("Order Flow", () => {
     expect(await prisma.order_item.count()).toBe(initialOrderItemCount);
     expect(await prisma.cart_item.count()).toBe(initialCartItemCount);
 
-    const postInventory = await prisma.inventory.findFirst({
+    const postInventory = await prisma.inventory.findUnique({
       where: { product_variant_id: variant.id }
     });
     expect(postInventory!.quantity).toBe(1); // not reduced further
@@ -213,7 +267,7 @@ describe("Order Flow", () => {
     expect(cancelRes.body.data.order.status).toBe("CANCELLED");
 
     // Re-increment inventory check (should happen when CANCELLED)
-    const inventory = await prisma.inventory.findFirst({
+    const inventory = await prisma.inventory.findUnique({
       where: { product_variant_id: variant.id }
     });
     // initial 10 - 2 (order) + 2 (cancel) = 10

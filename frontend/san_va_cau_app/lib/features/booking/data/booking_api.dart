@@ -69,6 +69,29 @@ class BookingApi {
     );
   }
 
+  Future<List<Booking>> createBookings({
+    required String bookingDate,
+    required Map<String, List<String>> courtSlots,
+    String paymentMethod = 'CASH',
+  }) async {
+    final response = await _apiClient.post(
+      '/bookings/batch',
+      token: await _readToken(),
+      body: {
+        'bookingDate': bookingDate,
+        'paymentMethod': paymentMethod,
+        'courts': [
+          for (final entry in courtSlots.entries)
+            {'courtId': entry.key, 'timeSlotIds': entry.value},
+        ],
+      },
+    );
+    final data = response['data'] as Map<String, dynamic>;
+    return (data['bookings'] as List<dynamic>)
+        .map((item) => Booking.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<List<Booking>> getMyBookings() async {
     final response = await _apiClient.get(
       '/bookings/me',
@@ -136,6 +159,15 @@ class BookingApi {
     // The updated booking is returned directly in data
     final data = response['data'] as Map<String, dynamic>;
     return Booking.fromJson(data);
+  }
+
+  Future<Booking> collectCash(String id) async {
+    final response = await _apiClient.post(
+      '/bookings/${id.trim()}/collect-cash',
+      token: await _readToken(),
+      body: {},
+    );
+    return Booking.fromJson(response['data'] as Map<String, dynamic>);
   }
 
   Future<String> _readToken() async {

@@ -7,9 +7,10 @@ import '../data/booking_api.dart';
 import '../models/booking.dart';
 
 class BookingDetailPage extends StatefulWidget {
-  const BookingDetailPage({required this.booking, super.key});
+  const BookingDetailPage({required this.booking, this.bookingApi, super.key});
 
   final Booking booking;
+  final BookingApi? bookingApi;
 
   @override
   State<BookingDetailPage> createState() => _BookingDetailPageState();
@@ -22,7 +23,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   @override
   void initState() {
     super.initState();
-    _bookingApi = BookingApi();
+    _bookingApi = widget.bookingApi ?? BookingApi();
   }
 
   Future<void> _cancelBooking() async {
@@ -632,6 +633,15 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                   ),
                 ),
 
+                if (booking.paymentStatus != 'PAID' &&
+                    booking.status == 'BOOKED') ...[
+                  const SizedBox(height: 16),
+                  const ListTile(
+                    leading: Icon(Icons.payments_outlined),
+                    title: Text('Thanh toán tiền mặt tại sân'),
+                    subtitle: Text('Nhân viên sẽ xác nhận sau khi nhận tiền.'),
+                  ),
+                ],
                 // Cancel Button
                 if (booking.status == 'BOOKED') ...[
                   const SizedBox(height: 20),

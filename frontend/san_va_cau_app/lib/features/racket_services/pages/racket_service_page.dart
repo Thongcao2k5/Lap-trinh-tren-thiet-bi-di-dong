@@ -9,23 +9,32 @@ import '../data/racket_service_api.dart';
 import '../models/branch_racket_service.dart';
 
 class RacketServicePage extends StatefulWidget {
-  const RacketServicePage({this.initialBranch, super.key});
+  const RacketServicePage({
+    this.initialBranch,
+    this.branchApi,
+    this.serviceApi,
+    super.key,
+  });
 
   final Branch? initialBranch;
+  final BranchApi? branchApi;
+  final RacketServiceApi? serviceApi;
 
   @override
   State<RacketServicePage> createState() => _RacketServicePageState();
 }
 
 class _RacketServicePageState extends State<RacketServicePage> {
-  final BranchApi _branchApi = BranchApi();
-  final RacketServiceApi _serviceApi = RacketServiceApi();
+  late final BranchApi _branchApi;
+  late final RacketServiceApi _serviceApi;
   late Future<_RacketServiceData> _dataFuture;
   String? _selectedBranchId;
 
   @override
   void initState() {
     super.initState();
+    _branchApi = widget.branchApi ?? BranchApi();
+    _serviceApi = widget.serviceApi ?? RacketServiceApi();
     _selectedBranchId = widget.initialBranch?.id;
     _dataFuture = _loadData();
   }
@@ -47,7 +56,9 @@ class _RacketServicePageState extends State<RacketServicePage> {
 
   Future<void> _reload() async {
     final future = _loadData();
-    setState(() => _dataFuture = future);
+    setState(() {
+      _dataFuture = future;
+    });
     await future;
   }
 
@@ -265,7 +276,7 @@ class _ServiceImage extends StatelessWidget {
         source: url!,
         width: 64,
         height: 64,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         fallback: fallback,
       ),
     );

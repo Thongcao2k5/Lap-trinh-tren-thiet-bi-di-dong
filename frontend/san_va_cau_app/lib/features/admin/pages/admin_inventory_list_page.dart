@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../theme/admin_theme.dart';
+import '../widgets/admin_ui.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../branches/data/branch_api.dart';
-import '../../branches/models/branch.dart';
 import '../../products/data/product_api.dart';
 import '../data/admin_inventory_api.dart';
 import '../models/admin_inventory.dart';
@@ -37,15 +39,10 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
   List<AdminInventory> _allInventories = [];
   List<AdminInventory> _displayedInventories = [];
 
-  List<Branch> _branches = [];
-  String? _selectedBranchId;
-
   final TextEditingController _searchController = TextEditingController();
 
   bool get isAdmin => widget.role == 'ADMIN';
-  bool get canMutate => isAdmin || widget.role == 'BRANCH_MANAGER';
-  bool get hasAssignedBranch =>
-      widget.assignedBranchId != null && widget.assignedBranchId!.isNotEmpty;
+  bool get canMutate => isAdmin;
 
   @override
   void initState() {
@@ -54,10 +51,6 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
     _branchApi = widget.branchApi ?? BranchApi();
 
     _searchController.addListener(_filterBySearch);
-
-    if (!isAdmin) {
-      _selectedBranchId = widget.assignedBranchId;
-    }
 
     _loadInitialData();
   }
@@ -91,70 +84,14 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
   }
 
   Future<void> _loadInitialData() async {
-    // Role check for missing branchId
-    if (!isAdmin && !hasAssignedBranch) {
-      if (mounted) {
-        setState(() {
-          _error =
-              'Tài khoản của bạn chưa được gán cho bất kỳ chi nhánh nào. '
-              'Vui lòng liên hệ quản trị viên.';
-          _isLoading = false;
-        });
-      }
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      final futures = <Future>[
-        _api.getInventories(branchId: _selectedBranchId),
-      ];
+      final inventories = await _api.getInventories();
 
-      if (isAdmin) {
-        futures.add(_branchApi.getBranches());
-      }
-
-      final results = await Future.wait(futures);
-
-      if (mounted) {
-        setState(() {
-          _allInventories = results[0] as List<AdminInventory>;
-          if (isAdmin) {
-            _branches = results[1] as List<Branch>;
-            // Add a synthetic "All" option if needed, but we handle it via null selected branch.
-          }
-          _isLoading = false;
-          _applySearch();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadInventories() async {
-    if (!isAdmin && !hasAssignedBranch) {
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final inventories = await _api.getInventories(
-        branchId: _selectedBranchId,
-      );
       if (mounted) {
         setState(() {
           _allInventories = inventories;
@@ -172,89 +109,29 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
     }
   }
 
-  void _showFilterSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Lọc theo chi nhánh',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String?>(
-                      initialValue: _selectedBranchId,
-                      decoration: const InputDecoration(
-                        labelText: 'Chi nhánh',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('Tất cả chi nhánh'),
-                        ),
-                        ..._branches.map(
-                          (b) => DropdownMenuItem(
-                            value: b.id,
-                            child: Text(b.name),
-                          ),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        setSheetState(() => _selectedBranchId = val);
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              setSheetState(() {
-                                _selectedBranchId = null;
-                              });
-                              Navigator.pop(context);
-                              _loadInventories();
-                            },
-                            child: const Text('Xóa bộ lọc'),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _loadInventories();
-                            },
-                            child: const Text('Áp dụng'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+  Future<void> _loadInventories() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final inventories = await _api.getInventories();
+      if (mounted) {
+        setState(() {
+          _allInventories = inventories;
+          _isLoading = false;
+          _applySearch();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   String _formatDate(DateTime? date) {
@@ -264,70 +141,100 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Quản lý tồn kho'),
-        centerTitle: true,
-        actions: [
-          if (isAdmin)
-            IconButton(
-              icon: const Icon(Icons.filter_list),
-              onPressed: _showFilterSheet,
-              tooltip: 'Lọc chi nhánh',
+    return Theme(
+      data: AdminTheme.data(Theme.of(context)),
+      child: Scaffold(
+        backgroundColor: AdminTheme.canvas,
+        appBar: AppBar(
+          title: const Text('Quản lý tồn kho'),
+          backgroundColor: AdminTheme.graphite,
+          foregroundColor: Colors.white,
+          bottom: PreferredSize(
+            preferredSize: Size.fromHeight(
+              48 * MediaQuery.textScalerOf(context).scale(1) + 12,
             ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: TextField(
-              key: const Key('inventory-search-field'),
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Tìm theo tên, SKU...',
-                prefixIcon: const Icon(Icons.search),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                filled: true,
-                fillColor: AppColors.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppColors.borderMuted),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: TextField(
+                key: const Key('inventory-search-field'),
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Tìm theo tên, SKU...',
+                  prefixIcon: const Icon(Icons.search),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  filled: true,
+                  fillColor: AdminTheme.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      AdminTheme.compactRadius,
+                    ),
+                    borderSide: const BorderSide(color: AdminTheme.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      AdminTheme.compactRadius,
+                    ),
+                    borderSide: const BorderSide(color: AdminTheme.border),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-      floatingActionButton: canMutate && (isAdmin || hasAssignedBranch)
-          ? FloatingActionButton(
-              onPressed: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AdminInventoryFormPage(
-                      role: widget.role,
-                      assignedBranchId: widget.assignedBranchId,
-                      inventoryApi: _api,
-                      productApi: widget.productApi,
-                      branchApi: _branchApi,
+        floatingActionButton: canMutate
+            ? FloatingActionButton(
+                tooltip: 'Thêm tồn kho',
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AdminInventoryFormPage(
+                        role: widget.role,
+                        assignedBranchId: widget.assignedBranchId,
+                        inventoryApi: _api,
+                        productApi: widget.productApi,
+                        branchApi: _branchApi,
+                      ),
                     ),
+                  );
+                  if (result == true) {
+                    _loadInventories();
+                  }
+                },
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.onPrimary,
+                child: const Icon(Icons.add),
+              )
+            : null,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: AdminSurface(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Kho chung',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        canMutate
+                            ? 'Bạn có quyền cập nhật số lượng tồn kho.'
+                            : 'Bạn có quyền xem số lượng tồn kho.',
+                        style: const TextStyle(color: AdminTheme.textSecondary),
+                      ),
+                    ],
                   ),
-                );
-                if (result == true) {
-                  _loadInventories();
-                }
-              },
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-              child: const Icon(Icons.add),
-            )
-          : null,
-      body: _buildBody(),
+                ),
+              ),
+              Expanded(child: _buildBody()),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -339,34 +246,11 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
     }
 
     if (_error != null && _allInventories.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: AppColors.primary,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Lỗi: $_error',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 16),
-              if (isAdmin ||
-                  (widget.assignedBranchId != null &&
-                      widget.assignedBranchId!.isNotEmpty))
-                ElevatedButton(
-                  onPressed: _loadInitialData,
-                  child: const Text('Thử lại'),
-                ),
-            ],
-          ),
-        ),
+      return AdminStateView(
+        icon: Icons.cloud_off_rounded,
+        title: 'Lỗi: $_error',
+        actionLabel: 'Thử lại',
+        onAction: _loadInitialData,
       );
     }
 
@@ -378,21 +262,9 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
           child: Container(
             height: MediaQuery.of(context).size.height * 0.6,
             alignment: Alignment.center,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.inventory_2_outlined,
-                  size: 64,
-                  color: AppColors.textSecondary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Không tìm thấy tồn kho nào.',
-                  style: Theme.of(context).textTheme.bodyLarge
-                      ?.copyWith(color: AppColors.textSecondary),
-                ),
-              ],
+            child: const AdminStateView(
+              icon: Icons.inventory_2_rounded,
+              title: 'Không tìm thấy tồn kho nào.',
             ),
           ),
         ),
@@ -414,21 +286,20 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
           final variantName =
               inv.productVariant?.variantName ?? 'Unknown Variant';
           final sku = inv.productVariant?.sku ?? 'N/A';
-          final branchName = inv.branch?.name ?? 'Unknown Branch';
 
           return Card(
             elevation: 0,
-            color: AppColors.surface,
+            color: AdminTheme.surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AdminTheme.compactRadius),
               side: BorderSide(
-                color: isLowStock ? AppColors.warning : AppColors.border,
+                color: isLowStock ? AppColors.warning : AdminTheme.border,
                 width: isLowStock ? 2 : 1,
               ),
             ),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              onTap: !canMutate
+              onTap: !isAdmin
                   ? null
                   : () async {
                       final result = await Navigator.push(
@@ -465,7 +336,7 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
                                       fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimary,
+                                      color: AdminTheme.textPrimary,
                                     ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -475,7 +346,7 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                                 variantName,
                                 style: Theme.of(context).textTheme.bodyMedium
                                     ?.copyWith(
-                                      color: AppColors.textSecondary,
+                                      color: AdminTheme.textSecondary,
                                       fontWeight: FontWeight.w600,
                                     ),
                               ),
@@ -483,7 +354,7 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                               Text(
                                 'SKU: $sku',
                                 style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: AppColors.textSecondary),
+                                    ?.copyWith(color: AdminTheme.textSecondary),
                               ),
                             ],
                           ),
@@ -497,12 +368,14 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                           decoration: BoxDecoration(
                             color: isLowStock
                                 ? AppColors.warningSoft
-                                : AppColors.surfaceMuted,
-                            borderRadius: BorderRadius.circular(8),
+                                : AdminTheme.canvas,
+                            borderRadius: BorderRadius.circular(
+                              AdminTheme.compactRadius,
+                            ),
                             border: Border.all(
                               color: isLowStock
                                   ? AppColors.warning.withValues(alpha: 0.3)
-                                  : AppColors.borderMuted,
+                                  : AdminTheme.border,
                             ),
                           ),
                           child: Column(
@@ -513,8 +386,8 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                   color: isLowStock
-                                      ? AppColors.warning
-                                      : AppColors.textPrimary,
+                                      ? AdminTheme.warningText
+                                      : AdminTheme.textPrimary,
                                 ),
                               ),
                               Text(
@@ -522,8 +395,8 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: isLowStock
-                                      ? AppColors.warning
-                                      : AppColors.textSecondary,
+                                      ? AdminTheme.warningText
+                                      : AdminTheme.textSecondary,
                                 ),
                               ),
                             ],
@@ -531,40 +404,48 @@ class _AdminInventoryListPageState extends State<AdminInventoryListPage> {
                         ),
                       ],
                     ),
+                    if (isLowStock) ...[
+                      const SizedBox(height: 12),
+                      const AdminStatusBadge(
+                        label: 'Sắp hết hàng · tồn kho thấp',
+                        tone: AdminStatusTone.warning,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     const Divider(height: 1),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const Icon(
-                          Icons.store_outlined,
+                          Icons.storefront_rounded,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: AdminTheme.textSecondary,
                         ),
                         const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            branchName,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Text(
+                          'Kho chung',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AdminTheme.textPrimary,
+                            fontWeight: FontWeight.w500,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const Icon(
-                          Icons.update_outlined,
+                          Icons.update_rounded,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: AdminTheme.textSecondary,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           _formatDate(inv.updatedAt),
                           style: const TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: AdminTheme.textSecondary,
                           ),
                         ),
                       ],

@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:san_va_cau_app/core/theme/app_theme.dart';
+
+import 'admin_test_accessibility.dart';
+
 import 'package:san_va_cau_app/core/network/api_client.dart';
 import 'package:san_va_cau_app/features/admin/pages/admin_booking_list_page.dart';
 import 'package:san_va_cau_app/features/booking/data/booking_api.dart';
@@ -37,6 +43,141 @@ Widget _app(BookingApi api) {
 }
 
 void main() {
+  for (final size in [
+    const Size(320, 800),
+    const Size(375, 800),
+    const Size(800, 375),
+  ]) {
+    testWidgets(
+      'booking list and detail remain usable at $size with large text',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final booking = Booking(
+          id: '99',
+          status: 'BOOKED',
+          totalAmount: '200000',
+          branch: const BookingBranch(
+            id: '2',
+            name: 'Chi nhánh có tên dài để kiểm tra hiển thị',
+          ),
+          court: const BookingCourt(id: '3', name: 'Sân số 1'),
+          customer: const BookingCustomer(
+            id: '1',
+            fullName: 'Khách hàng có tên dài',
+            phone: '0987654321',
+          ),
+          bookingDate: DateTime(2026, 10, 12),
+          slots: const [
+            BookingTimeSlot(
+              id: '1',
+              timeSlotId: '1',
+              startTime: '10:00',
+              endTime: '11:00',
+              priceAtBooking: '200000',
+            ),
+          ],
+        );
+        final api = _FakeBookingApi((date, status) async => [booking]);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(1.5)),
+              child: child!,
+            ),
+            home: AdminBookingListPage(bookingApi: api),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await expectAdminAccessibility(tester);
+        await tester.tap(find.text('Lịch #99'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await expectAdminAccessibility(tester);
+        await tester.drag(find.byType(ListView).last, const Offset(0, -1500));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await expectAdminAccessibility(tester);
+        expect(find.widgetWithText(ElevatedButton, 'Hủy lịch'), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets(
+    'cancellation requires confirmation and disables actions during submission',
+    (tester) async {
+      final result = Completer<Booking>();
+      var calls = 0;
+      final booking = Booking(
+        id: '99',
+        status: 'BOOKED',
+        totalAmount: '200000',
+        bookingDate: DateTime(2026, 10, 12),
+        branch: const BookingBranch(id: '2', name: 'Chi nhánh'),
+        court: const BookingCourt(id: '3', name: 'Sân'),
+        slots: [],
+      );
+      final api = _FakeBookingApi((date, status) async => [booking], (
+        id,
+        status,
+      ) {
+        calls++;
+        expect(status, 'CANCELLED');
+        return result.future;
+      });
+      await tester.pumpWidget(_app(api));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lịch #99'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Hủy lịch'));
+      await tester.pumpAndSettle();
+      expect(calls, 0);
+      await tester.tap(find.text('Bỏ qua'));
+      await tester.pumpAndSettle();
+      expect(calls, 0);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Hủy lịch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xác nhận'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(calls, 1);
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.widgetWithText(ElevatedButton, 'Hủy lịch'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.widgetWithText(ElevatedButton, 'Nhận sân'),
+            )
+            .onPressed,
+        isNull,
+      );
+      result.completeError(
+        const ApiException(statusCode: 400, message: 'Không thể hủy'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Không thể hủy'), findsOneWidget);
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.widgetWithText(ElevatedButton, 'Hủy lịch'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
   testWidgets('renders loading state initially', (tester) async {
     final api = _FakeBookingApi((date, status) async {
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -190,8 +331,16 @@ void main() {
       expect(find.text('0987654321'), findsOneWidget);
       expect(find.text('Chi nhánh VIP'), findsOneWidget);
       expect(find.text('Sân số 1'), findsOneWidget);
+      expect(find.text('Chưa thanh toán · Cần thu 200.000 đ'), findsOneWidget);
+      expect(find.text('Thu tiền mặt'), findsOneWidget);
+      await tester.tap(find.text('Thu tiền mặt'));
+      await tester.pumpAndSettle();
+      expect(find.text('Xác nhận thu tiền mặt'), findsOneWidget);
+      expect(find.text('Đã nhận đủ tiền'), findsOneWidget);
+      await tester.tap(find.text('Bỏ qua'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('10:00 - 11:00'), 150, scrollable: find.byType(Scrollable).first);
       expect(find.text('10:00 - 11:00'), findsOneWidget);
-      expect(find.text('Chưa thanh toán'), findsWidgets);
 
       // Actions should be present for BOOKED
       expect(find.widgetWithText(ElevatedButton, 'Nhận sân'), findsOneWidget);
@@ -210,6 +359,7 @@ void main() {
     Booking booking = Booking(
       id: '99',
       status: 'BOOKED',
+      paymentStatus: 'PAID',
       totalAmount: '200000',
       branch: const BookingBranch(id: '2', name: 'Chi nhánh VIP'),
       court: const BookingCourt(id: '3', name: 'Sân số 1'),
@@ -224,6 +374,7 @@ void main() {
       booking = Booking(
         id: '99',
         status: status,
+        paymentStatus: 'PAID',
         totalAmount: '200000',
         branch: const BookingBranch(id: '2', name: 'Chi nhánh VIP'),
         court: const BookingCourt(id: '3', name: 'Sân số 1'),

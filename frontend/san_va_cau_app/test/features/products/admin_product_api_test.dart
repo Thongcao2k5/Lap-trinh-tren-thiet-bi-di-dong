@@ -72,9 +72,29 @@ class FakeApiClient implements ApiClient {
   }
 
   @override
+  Future<Map<String, dynamic>> put(
+    String path, {
+    Map<String, String>? queryParameters,
+    Map<String, dynamic>? body,
+    String? token,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Map<String, dynamic>> delete(
     String path, {
     Map<String, String>? queryParameters,
+    String? token,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    required String filePath,
+    String fieldName = 'image',
     String? token,
   }) async {
     throw UnimplementedError();

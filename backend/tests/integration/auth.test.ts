@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { request } from "../helpers/app.js";
 import { clearDatabase } from "../helpers/db.js";
 import { createAdmin } from "../helpers/fixtures.js";
+import { prisma } from "../../src/lib/prisma.js";
 
 describe("Authentication Flow", () => {
   beforeEach(async () => {
@@ -15,8 +16,19 @@ describe("Authentication Flow", () => {
     phone: "0901234567",
   };
 
+  const registerCustomer = async () => {
+    const requestOtp = await request
+      .post("/api/auth/register/request-otp")
+      .send(validCustomer);
+    expect(requestOtp.status).toBe(202);
+    return request.post("/api/auth/register/verify-otp").send({
+      email: validCustomer.email,
+      code: "123456",
+    });
+  };
+
   it("Register a customer successfully", async () => {
-    const res = await request.post("/api/auth/register").send(validCustomer);
+    const res = await registerCustomer();
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.user.email).toBe(validCustomer.email);
@@ -25,14 +37,14 @@ describe("Authentication Flow", () => {
   });
 
   it("Reject duplicate email registration", async () => {
-    await request.post("/api/auth/register").send(validCustomer);
-    const res = await request.post("/api/auth/register").send(validCustomer);
+    await registerCustomer();
+    const res = await request.post("/api/auth/register/request-otp").send(validCustomer);
     expect(res.status).toBe(409); // Typically conflict
     expect(res.body.success).toBe(false);
   });
 
   it("Reject invalid registration data", async () => {
-    const res = await request.post("/api/auth/register").send({
+    const res = await request.post("/api/auth/register/request-otp").send({
       email: "not-an-email",
       password: "123", // too short
     });
@@ -40,8 +52,21 @@ describe("Authentication Flow", () => {
     expect(res.body.success).toBe(false);
   });
 
+  it("Reject malformed email registration", async () => {
+    const res = await request.post("/api/auth/register").send({
+      ...validCustomer,
+      email: "not-an-email",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      message: "registration data is invalid",
+    });
+  });
+
   it("Login successfully with created customer", async () => {
-    await request.post("/api/auth/register").send(validCustomer);
+    await registerCustomer();
 
     const res = await request.post("/api/auth/login").send({
       email: validCustomer.email,
@@ -53,8 +78,34 @@ describe("Authentication Flow", () => {
     expect(res.body.data.token).toBeDefined();
   });
 
+  it("Login returns the mustChangePassword flag", async () => {
+    await registerCustomer();
+    await prisma.app_user.update({
+      where: { email: validCustomer.email },
+      data: { must_change_password: true },
+    });
+
+    const res = await request.post("/api/auth/login").send({
+      email: validCustomer.email,
+      password: validCustomer.password,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.mustChangePassword).toBe(true);
+  });
+
+  it("Reject malformed email login", async () => {
+    const res = await request.post("/api/auth/login").send({
+      email: "not-an-email",
+      password: validCustomer.password,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("email is invalid");
+  });
+
   it("Reject wrong password", async () => {
-    await request.post("/api/auth/register").send(validCustomer);
+    await registerCustomer();
 
     const res = await request.post("/api/auth/login").send({
       email: validCustomer.email,
@@ -66,7 +117,7 @@ describe("Authentication Flow", () => {
   });
 
   it("GET /api/auth/me succeeds with valid token", async () => {
-    const regRes = await request.post("/api/auth/register").send(validCustomer);
+    const regRes = await registerCustomer();
     const token = regRes.body.data.token;
 
     const res = await request
@@ -91,6 +142,136 @@ describe("Authentication Flow", () => {
     
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
+  });
+
+  it("Reject changing to the current password", async () => {
+    const registerResponse = await registerCustomer();
+
+    const res = await request
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${registerResponse.body.data.token}`)
+      .send({
+        currentPassword: validCustomer.password,
+        newPassword: validCustomer.password,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      "new password must be different from current password",
+    );
+  });
+
+  it("Reset password with a valid email OTP", async () => {
+    await registerCustomer();
+    await request
+      .post("/api/auth/forgot-password/request-otp")
+      .send({ email: validCustomer.email });
+
+    const verifyResponse = await request
+      .post("/api/auth/forgot-password/verify-otp")
+      .send({ email: validCustomer.email, code: "123456" });
+
+    const resetResponse = await request
+      .post("/api/auth/forgot-password/reset")
+      .send({
+        resetToken: verifyResponse.body.data.resetToken,
+        newPassword: "NewPassword123",
+      });
+
+    expect(resetResponse.status).toBe(200);
+    const loginResponse = await request.post("/api/auth/login").send({
+      email: validCustomer.email,
+      password: "NewPassword123",
+    });
+    expect(loginResponse.status).toBe(200);
+  });
+
+  it("Reject an invalid password reset OTP", async () => {
+    await registerCustomer();
+    await request
+      .post("/api/auth/forgot-password/request-otp")
+      .send({ email: validCustomer.email });
+
+    const response = await request
+      .post("/api/auth/forgot-password/verify-otp")
+      .send({
+        email: validCustomer.email,
+        code: "000000",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe("OTP is invalid or expired");
+  });
+
+  it("Changes the authenticated user's email with a valid OTP", async () => {
+    const registerResponse = await registerCustomer();
+    const token = registerResponse.body.data.token;
+    const newEmail = "changed@example.com";
+
+    const requestResponse = await request
+      .post("/api/auth/email-change/request-otp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ newEmail });
+
+    expect(requestResponse.status).toBe(202);
+
+    const verifyResponse = await request
+      .post("/api/auth/email-change/verify-otp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ newEmail, code: "123456" });
+
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.data.user.email).toBe(newEmail);
+    expect(
+      await prisma.app_user.findUnique({ where: { email: newEmail } }),
+    ).not.toBeNull();
+    expect(
+      await prisma.app_user.findUnique({ where: { email: validCustomer.email } }),
+    ).toBeNull();
+  });
+
+  it("Rejects requesting an email change to an existing email", async () => {
+    const registerResponse = await registerCustomer();
+    const token = registerResponse.body.data.token;
+    const { user: admin } = await createAdmin();
+
+    const response = await request
+      .post("/api/auth/email-change/request-otp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ newEmail: admin.email });
+
+    expect(response.status).toBe(409);
+    expect(response.body.message).toBe("email already exists");
+  });
+
+  it("Rejects email change verification without authentication", async () => {
+    const response = await request
+      .post("/api/auth/email-change/verify-otp")
+      .send({ newEmail: "changed@example.com", code: "123456" });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("Uploads an avatar for the authenticated user", async () => {
+    const registerResponse = await registerCustomer();
+    const token = registerResponse.body.data.token;
+
+    const response = await request
+      .post("/api/uploads/avatar")
+      .set("Authorization", `Bearer ${token}`)
+      .attach("image", Buffer.from("fake image data"), {
+        filename: "avatar.png",
+        contentType: "image/png",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.avatarUrl).toMatch(/^\/uploads\/images\/.+\.png$/);
+
+    const user = await prisma.app_user.findUnique({
+      where: { email: validCustomer.email },
+      select: { avatar_url: true },
+    });
+    expect(user?.avatar_url).toBe(response.body.data.avatarUrl);
   });
 
   it("Reject /dev/create-admin in production environment", async () => {
