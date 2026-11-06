@@ -4,6 +4,7 @@ import '../theme/admin_theme.dart';
 import '../widgets/admin_ui.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_image.dart';
 import '../../products/data/product_api.dart';
 import '../../products/models/product.dart';
 import 'admin_product_detail_page.dart';
@@ -454,10 +455,10 @@ class _ProductCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AdminTheme.compactRadius),
                 ),
                 child: product.imageUrl != null && product.imageUrl!.isNotEmpty
-                    ? Image.network(
-                        product.imageUrl!,
+                    ? AppImage(
+                        source: product.imageUrl!,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const Icon(
+                        fallback: const Icon(
                           Icons.image_not_supported_rounded,
                           color: AdminTheme.textSecondary,
                         ),

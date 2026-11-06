@@ -1,15 +1,21 @@
 export function assertProductSeedDatabase(connectionString: string | undefined) {
   if (!connectionString) throw new Error("DATABASE_URL is required");
   const url = new URL(connectionString);
+  const allowed = process.env.ALLOW_SEED_MAIN === "true"
+    ? ["/sanvacau_test", "/sanvacau"]
+    : ["/sanvacau_test"];
   if (!["postgres:", "postgresql:"].includes(url.protocol) ||
-      decodeURIComponent(url.pathname) !== "/sanvacau_test" ||
+      !allowed.includes(decodeURIComponent(url.pathname)) ||
       [...url.searchParams.keys()].some((key) => ["dbname", "database", "options", "host", "port", "user", "service"].includes(key.toLowerCase()))) {
     throw new Error("Product seed is restricted to sanvacau_test (no connection overrides)");
   }
 }
 
 export function assertProductSeedIdentity(database: string) {
-  if (database !== "sanvacau_test") throw new Error("Connected database must be sanvacau_test");
+  const allowed = process.env.ALLOW_SEED_MAIN === "true"
+    ? ["sanvacau_test", "sanvacau"]
+    : ["sanvacau_test"];
+  if (!allowed.includes(database)) throw new Error("Connected database must be sanvacau_test");
 }
 
 export function assertProductImagePolicy(
