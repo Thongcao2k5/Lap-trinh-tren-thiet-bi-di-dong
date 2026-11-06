@@ -4,6 +4,7 @@ import '../theme/admin_theme.dart';
 import '../widgets/admin_ui.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_image.dart';
 import '../../products/data/product_api.dart';
 import '../../products/models/product.dart';
 import '../../products/models/product_variant.dart';
@@ -305,10 +306,10 @@ class _AdminProductDetailPageState extends State<AdminProductDetailPage> {
                         child:
                             _product!.imageUrl != null &&
                                 _product!.imageUrl!.isNotEmpty
-                            ? Image.network(
-                                _product!.imageUrl!,
+                            ? AppImage(
+                                source: _product!.imageUrl!,
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, _, _) => const Icon(
+                                fallback: const Icon(
                                   Icons.image_not_supported_rounded,
                                   color: AdminTheme.textSecondary,
                                 ),
@@ -467,10 +468,10 @@ class _AdminProductDetailPageState extends State<AdminProductDetailPage> {
                         child:
                             variant.imageUrl != null &&
                                 variant.imageUrl!.isNotEmpty
-                            ? Image.network(
-                                variant.imageUrl!,
+                            ? AppImage(
+                                source: variant.imageUrl!,
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, _, _) => const Icon(
+                                fallback: const Icon(
                                   Icons.image_not_supported_rounded,
                                   color: AdminTheme.textSecondary,
                                 ),

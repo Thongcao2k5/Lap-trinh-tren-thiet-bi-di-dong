@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/admin_theme.dart';
+import '../../../core/widgets/app_image.dart';
 import '../widgets/admin_ui.dart';
 
 import '../../../core/network/api_client.dart';
@@ -322,19 +323,10 @@ class _BannerPreview extends StatelessWidget {
         color: AdminTheme.canvas,
         child: imageUrl.isEmpty
             ? _placeholder('Chưa có ảnh banner')
-            : Image.network(
-                imageUrl,
+            : AppImage(
+                source: imageUrl,
                 fit: BoxFit.cover,
-                excludeFromSemantics: true,
-                errorBuilder: (_, _, _) =>
-                    _placeholder('Không thể tải ảnh banner'),
-                loadingBuilder: (context, child, progress) => progress == null
-                    ? child
-                    : const Center(
-                        child: CircularProgressIndicator(
-                          semanticsLabel: 'Đang tải ảnh banner',
-                        ),
-                      ),
+                fallback: _placeholder('Không thể tải ảnh banner'),
               ),
       ),
     ),

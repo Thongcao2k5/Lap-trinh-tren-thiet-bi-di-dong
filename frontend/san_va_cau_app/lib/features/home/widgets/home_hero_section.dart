@@ -104,6 +104,38 @@ class _HomeHeroSectionState extends State<HomeHeroSection>
     widget.onViewBranchesPressed,
   ];
 
+  void _navigateForSlide(_HeroSlide slide, int index) {
+    final link = slide.linkUrl?.trim() ?? "";
+    if (link.startsWith("http://") || link.startsWith("https://")) {
+      openUrlSafely(context, link);
+      return;
+    }
+
+    final lower = link.toLowerCase();
+    if (slide.cta.toLowerCase().contains("tin") || lower.contains("news")) {
+      widget.onViewNewsPressed();
+      return;
+    }
+    if (lower.contains("book") || lower.contains("court") || lower.contains("san")) {
+      widget.onBookCourtPressed();
+      return;
+    }
+    if (lower.contains("product") || lower.contains("shop") || lower.contains("san-pham")) {
+      widget.onViewProductsPressed();
+      return;
+    }
+    if (lower.contains("branch") || lower.contains("chi-nhanh")) {
+      widget.onViewBranchesPressed();
+      return;
+    }
+
+    if (index >= 0 && index < _positionalActions.length) {
+      _positionalActions[index]();
+    } else if (slide.onPressed != null) {
+      slide.onPressed!();
+    }
+  }
+
   List<_HeroSlide> _buildSlides() {
     final fallbacks = _fallbackSlides;
     final apiBanners = widget.banners.take(4).toList();
@@ -111,27 +143,37 @@ class _HomeHeroSectionState extends State<HomeHeroSection>
     final slides = <_HeroSlide>[];
     for (var i = 0; i < apiBanners.length && i < 4; i++) {
       final banner = apiBanners[i];
-      slides.add(
-        _HeroSlide(
-          eyebrow: banner.title.isNotEmpty
-              ? banner.title.toUpperCase()
-              : fallbacks[i].eyebrow,
-          title: fallbacks[i].title,
-          description: fallbacks[i].description,
-          cta: fallbacks[i].cta,
-          icon: fallbacks[i].icon,
-          imageUrl: banner.imageUrl.isNotEmpty ? banner.imageUrl : null,
-          linkUrl: banner.linkUrl,
-          onPressed: (banner.linkUrl != null && banner.linkUrl!.isNotEmpty)
-              ? null // Will use linkUrl via openUrlSafely
-              : _positionalActions[i],
-        ),
+      late final _HeroSlide heroSlide;
+      heroSlide = _HeroSlide(
+        eyebrow: banner.title.isNotEmpty
+            ? banner.title.toUpperCase()
+            : fallbacks[i].eyebrow,
+        title: fallbacks[i].title,
+        description: fallbacks[i].description,
+        cta: fallbacks[i].cta,
+        icon: fallbacks[i].icon,
+        imageUrl: banner.imageUrl.isNotEmpty ? banner.imageUrl : null,
+        linkUrl: banner.linkUrl,
+        onPressed: () => _navigateForSlide(heroSlide, i),
       );
+      slides.add(heroSlide);
     }
 
     // Fill remaining positions with fallback slides.
     for (var i = slides.length; i < 4; i++) {
-      slides.add(fallbacks[i]);
+      final fallback = fallbacks[i];
+      late final _HeroSlide heroSlide;
+      heroSlide = _HeroSlide(
+        eyebrow: fallback.eyebrow,
+        title: fallback.title,
+        description: fallback.description,
+        cta: fallback.cta,
+        icon: fallback.icon,
+        imageUrl: fallback.imageUrl,
+        linkUrl: fallback.linkUrl,
+        onPressed: () => _navigateForSlide(heroSlide, i),
+      );
+      slides.add(heroSlide);
     }
 
     return slides;
@@ -235,77 +277,83 @@ class _HeroSlideCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background: API image or fallback gradient.
-          _SlideBackground(imageUrl: slide.imageUrl, icon: slide.icon),
-          // Dark overlay for readability.
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.primaryDark.withValues(alpha: 0.55),
-                  AppColors.primaryDark.withValues(alpha: 0.85),
-                ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: slide.onPressed,
+        child: Container(
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Background: API image or fallback gradient.
+              _SlideBackground(imageUrl: slide.imageUrl, icon: slide.icon),
+              // Dark overlay for readability.
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.primaryDark.withValues(alpha: 0.55),
+                      AppColors.primaryDark.withValues(alpha: 0.85),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-          // Content.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 88, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Eyebrow badge.
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    slide.eyebrow,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
+              // Content.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 88, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Eyebrow badge.
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        slide.eyebrow,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // Title.
-                Flexible(
-                  child: Text(
-                    slide.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
+                    const SizedBox(height: 4),
+                    // Title.
+                    Flexible(
+                      child: Text(
+                        slide.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                    // CTA Button.
+                    _SlideCta(slide: slide),
+                  ],
                 ),
-                const Spacer(),
-                // CTA Button.
-                _SlideCta(slide: slide),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -414,13 +462,7 @@ class _SlideCta extends StatelessWidget {
     return SizedBox(
       height: 24,
       child: TextButton(
-        onPressed: () {
-          if (slide.linkUrl != null && slide.linkUrl!.isNotEmpty) {
-            openUrlSafely(context, slide.linkUrl!);
-          } else {
-            slide.onPressed?.call();
-          }
-        },
+        onPressed: slide.onPressed,
         style: TextButton.styleFrom(
           foregroundColor: Colors.white,
           padding: EdgeInsets.zero,

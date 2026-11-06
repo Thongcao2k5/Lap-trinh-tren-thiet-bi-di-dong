@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/admin_theme.dart';
+import '../../../core/widgets/app_image.dart';
 import '../widgets/admin_ui.dart';
 
 import 'package:san_va_cau_app/core/network/api_client.dart';
@@ -469,16 +470,14 @@ class _AdminOrderDetailPageState extends State<AdminOrderDetailPage> {
                                               ? ClipRRect(
                                                   borderRadius:
                                                       BorderRadius.circular(8),
-                                                  child: Image.network(
-                                                    item.imageUrl!,
-                                                    fit: BoxFit.contain,
-                                                    errorBuilder: (_, _, _) =>
-                                                        const Icon(
-                                                          Icons
-                                                              .image_not_supported,
-                                                          color: Colors.grey,
-                                                        ),
-                                                  ),
+                                                  child: AppImage(
+                                                      source: item.imageUrl!,
+                                                      fit: BoxFit.contain,
+                                                      fallback: const Icon(
+                                                        Icons.image_not_supported,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    ),
                                                 )
                                               : const Icon(
                                                   Icons.inventory_2_outlined,

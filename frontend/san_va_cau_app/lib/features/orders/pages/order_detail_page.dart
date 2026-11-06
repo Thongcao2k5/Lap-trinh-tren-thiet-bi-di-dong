@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_image.dart';
 import '../data/fulfillment_api.dart';
 import '../data/order_api.dart';
 import '../models/order.dart';
@@ -631,14 +632,13 @@ class _OrderItemCard extends StatelessWidget {
                         color: AppColors.primary,
                         size: 28,
                       )
-                    : Image.network(
-                        item.imageUrl!,
+                    : AppImage(
+                        source: item.imageUrl!,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                              Icons.broken_image_rounded,
-                              color: AppColors.primary,
-                            ),
+                        fallback: const Icon(
+                          Icons.broken_image_rounded,
+                          color: AppColors.primary,
+                        ),
                       ),
               ),
             ),
