@@ -18,6 +18,9 @@ const seedCategories = async () => {
     { name: "Giày cầu lông", sortOrder: 2 },
     { name: "Áo thể thao", sortOrder: 3 },
     { name: "Phụ kiện", sortOrder: 4 },
+    { name: "Quần cầu lông", sortOrder: 5 },
+    { name: "Túi và bao vợt", sortOrder: 6 },
+    { name: "Phụ kiện khác", sortOrder: 7 },
   ];
 
   const roots = new Map<string, bigint>();
@@ -69,7 +72,7 @@ const seedCategories = async () => {
 };
 
 const seedBrands = async () => {
-  for (const name of ["Yonex", "Lining", "Victor", "Kawasaki", "SanVaCau"]) {
+  for (const name of ["Yonex", "Lining", "Victor", "Kawasaki", "SanVaCau", "Mizuno"]) {
     await prisma.brand.upsert({
       where: { name },
       update: {},

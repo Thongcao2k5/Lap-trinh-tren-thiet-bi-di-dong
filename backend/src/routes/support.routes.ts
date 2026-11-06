@@ -50,7 +50,7 @@ const toTicketResponse = (ticket: SupportTicketResponseRow) => ({
 });
 
 // A. POST /api/support/tickets
-supportRouter.post("/tickets", requireAuth, requireRole("CUSTOMER"), async (req, res, next) => {
+supportRouter.post("/tickets", requireAuth, requireRole(["CUSTOMER", "ADMIN"]), async (req, res, next) => {
   try {
     const customerId = BigInt(req.user!.id);
     const { subject, message, category, targetType, targetId, priority } = req.body;
@@ -153,7 +153,7 @@ supportRouter.post("/tickets", requireAuth, requireRole("CUSTOMER"), async (req,
 });
 
 // B. GET /api/support/tickets/me
-supportRouter.get("/tickets/me", requireAuth, requireRole("CUSTOMER"), async (req, res, next) => {
+supportRouter.get("/tickets/me", requireAuth, requireRole(["CUSTOMER", "ADMIN"]), async (req, res, next) => {
   try {
     const customerId = BigInt(req.user!.id);
     const page = Math.max(1, parseInt(req.query.page as string || "1", 10));
