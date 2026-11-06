@@ -326,21 +326,28 @@ class _CreateReviewDialogState extends State<_CreateReviewDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(5, (index) {
-              return IconButton(
-                tooltip: 'Chọn ${index + 1} sao',
-                onPressed: () {
-                  setState(() => _rating = index + 1);
-                },
-                icon: Icon(
-                  index < _rating ? Icons.star : Icons.star_border,
-                  color: Colors.amber.shade600,
-                  size: 32,
-                ),
-              );
-            }),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(5, (index) {
+                return IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  tooltip: 'Chọn ${index + 1} sao',
+                  onPressed: () {
+                    setState(() => _rating = index + 1);
+                  },
+                  icon: Icon(
+                    index < _rating ? Icons.star : Icons.star_border,
+                    color: Colors.amber.shade600,
+                    size: 30,
+                  ),
+                );
+              }),
+            ),
           ),
           const SizedBox(height: 16),
           TextField(

@@ -7,6 +7,9 @@ class TokenStorage {
 
   Future<String?> readToken() async {
     final preferences = await SharedPreferences.getInstance();
+    try {
+      await preferences.reload();
+    } catch (_) {}
     return preferences.getString(_tokenKey);
   }
 

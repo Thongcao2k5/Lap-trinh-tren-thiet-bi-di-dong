@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_image.dart';
 import '../../booking/models/court.dart';
 import '../../booking/pages/court_detail_page.dart';
 import '../../news/pages/news_detail_page.dart';
@@ -382,14 +383,13 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                      ? Image.network(
-                          item.imageUrl!,
+                      ? AppImage(
+                          source: item.imageUrl!,
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                                Icons.image,
-                                color: AppColors.textSecondary,
-                              ),
+                          fallback: const Icon(
+                            Icons.image,
+                            color: AppColors.textSecondary,
+                          ),
                         )
                       : const Icon(Icons.image, color: AppColors.textSecondary),
                 ),
