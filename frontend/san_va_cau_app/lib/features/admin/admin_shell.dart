@@ -72,8 +72,14 @@ class _AdminShellState extends State<AdminShell> {
     if (_isLoggingOut) return;
     setState(() => _isLoggingOut = true);
     try {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
       await _authApi.logout();
-      if (mounted) widget.onSessionChanged();
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        widget.onSessionChanged();
+      }
     } finally {
       if (mounted) setState(() => _isLoggingOut = false);
     }

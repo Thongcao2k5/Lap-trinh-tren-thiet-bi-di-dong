@@ -200,6 +200,7 @@ void main() {
       MaterialApp(
         home: CheckoutPage(
           cart: _cart,
+          allowDelivery: true,
           branchApi: _FakeBranchApi(),
           orderApi: orderApi,
           fulfillmentApi: fulfillmentApi,
@@ -257,6 +258,7 @@ void main() {
       MaterialApp(
         home: CheckoutPage(
           cart: _cart,
+          allowDelivery: true,
           branchApi: _FakeBranchApi(),
           orderApi: orderApi,
           fulfillmentApi: fulfillmentApi,
