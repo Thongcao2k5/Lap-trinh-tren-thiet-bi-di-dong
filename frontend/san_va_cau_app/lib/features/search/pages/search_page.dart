@@ -216,26 +216,63 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          controller: _searchController,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: 'Tìm kiếm (ít nhất 2 ký tự)...',
-            border: InputBorder.none,
-            hintStyle: TextStyle(
-              color: AppColors.onPrimary.withValues(alpha: 0.7),
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: TextField(
+            controller: _searchController,
+            autofocus: true,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
+            cursorColor: AppColors.primary,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Tìm kiếm (ít nhất 2 ký tự)...',
+              hintStyle: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 15,
+              ),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary, size: 22),
+              suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _searchController,
+                builder: (context, value, _) {
+                  if (value.text.isEmpty) return const SizedBox.shrink();
+                  return IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 20, color: AppColors.textSecondary),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _currentQuery = '';
+                        _searchData = null;
+                      });
+                    },
+                  );
+                },
+              ),
+              filled: true,
+              fillColor: AppColors.surface,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.borderMuted),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+            ),
+            onSubmitted: (_) {
+              if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+              setState(() {
+                _currentQuery = _searchController.text.trim();
+              });
+              _performSearch();
+            },
           ),
-          style: const TextStyle(color: AppColors.onPrimary),
-          cursorColor: AppColors.onPrimary,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) {
-            if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-            setState(() {
-              _currentQuery = _searchController.text.trim();
-            });
-            _performSearch();
-          },
         ),
       ),
       body: Column(

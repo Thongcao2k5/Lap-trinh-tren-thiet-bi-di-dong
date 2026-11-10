@@ -11,6 +11,8 @@ class ApiClient {
     : baseUrl = baseUrl ?? ApiConfig.baseUrl,
       _httpClient = httpClient ?? http.Client();
 
+  static const Duration _requestTimeout = Duration(seconds: 10);
+
   final http.Client _httpClient;
   final String baseUrl;
 
@@ -26,10 +28,15 @@ class ApiClient {
     Map<String, String>? queryParameters,
     String? token,
   }) async {
-    final response = await _httpClient.get(
-      _buildUri(path, queryParameters),
-      headers: _buildHeaders(token),
-    );
+    final response = await _httpClient
+        .get(_buildUri(path, queryParameters), headers: _buildHeaders(token))
+        .timeout(
+          _requestTimeout,
+          onTimeout: () => throw const ApiException(
+            statusCode: 408,
+            message: 'Kết nối mạng quá hạn. Vui lòng thử lại.',
+          ),
+        );
 
     return _decodeResponse(response);
   }
