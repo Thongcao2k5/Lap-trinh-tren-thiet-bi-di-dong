@@ -161,6 +161,13 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
+  void _handleSessionChanged() {
+    setState(() {
+      _accountRevision++;
+    });
+    widget.onSessionChanged?.call();
+  }
+
   void _openNewsPage() {
     Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const NewsListPage()));
@@ -200,7 +207,7 @@ class _MainShellState extends State<MainShell> {
       AccountPage(
         key: ValueKey('account-$_accountRevision'),
         authApi: widget.authApi,
-        onSessionChanged: widget.onSessionChanged,
+        onSessionChanged: _handleSessionChanged,
       ),
     ];
 

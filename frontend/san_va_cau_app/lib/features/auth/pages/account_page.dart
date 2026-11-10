@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/network/api_client.dart';
 import '../../../core/constants/api_config.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../admin/pages/admin_dashboard_page.dart';
+import '../../admin/admin_shell.dart';
 import '../../addresses/pages/address_list_page.dart';
 import '../../booking/pages/booking_history_page.dart';
 import '../../favorites/pages/favorites_page.dart';
@@ -136,16 +136,24 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _logout() async {
-    await _authApi.logout();
-    if (!mounted) return;
-    if (widget.onSessionChanged != null) {
-      widget.onSessionChanged!();
-      return;
-    }
     setState(() {
       _profileFuture = Future<AuthUser?>.value();
       _unreadNotificationCount = null;
     });
+
+    await _authApi.logout();
+    if (!mounted) return;
+
+    if (widget.onSessionChanged != null) {
+      widget.onSessionChanged!();
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Đã đăng xuất tài khoản thành công'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _openRequiredPasswordChange() async {
@@ -201,6 +209,8 @@ class _AccountPageState extends State<AccountPage> {
             }
             return _ProfileView(
               user: snapshot.data!,
+              authApi: _authApi,
+              onSessionChanged: widget.onSessionChanged,
               onLogout: _logout,
               onEditSuccess: _reloadProfile,
               unreadNotificationCount: _unreadNotificationCount,
@@ -272,6 +282,8 @@ class _PasswordChangeRequiredView extends StatelessWidget {
 class _ProfileView extends StatelessWidget {
   const _ProfileView({
     required this.user,
+    this.authApi,
+    this.onSessionChanged,
     required this.onLogout,
     required this.onEditSuccess,
     required this.unreadNotificationCount,
@@ -281,6 +293,8 @@ class _ProfileView extends StatelessWidget {
   });
 
   final AuthUser user;
+  final AuthApi? authApi;
+  final VoidCallback? onSessionChanged;
   final VoidCallback onLogout;
   final VoidCallback onEditSuccess;
   final int? unreadNotificationCount;
@@ -399,10 +413,25 @@ class _ProfileView extends StatelessWidget {
               icon: Icons.admin_panel_settings_outlined,
               title: 'Quản trị hệ thống',
               onTap: () {
+                if (adminDashboardPage != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => adminDashboardPage!,
+                    ),
+                  );
+                  return;
+                }
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                  return;
+                }
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) =>
-                        adminDashboardPage ?? const AdminDashboardPage(),
+                    builder: (_) => AdminShell(
+                      user: user,
+                      authApi: authApi,
+                      onSessionChanged: onSessionChanged ?? () {},
+                    ),
                   ),
                 );
               },
