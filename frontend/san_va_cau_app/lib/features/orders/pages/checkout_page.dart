@@ -25,6 +25,7 @@ class CheckoutPage extends StatefulWidget {
     this.paymentApi,
     this.voucherApi,
     this.addressPicker,
+    this.allowDelivery = false,
     super.key,
   });
 
@@ -37,6 +38,7 @@ class CheckoutPage extends StatefulWidget {
   final PaymentApi? paymentApi;
   final VoucherApi? voucherApi;
   final Future<CustomerAddress?> Function(BuildContext context)? addressPicker;
+  final bool allowDelivery;
 
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
@@ -536,26 +538,67 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                   ),
                             ),
                             const SizedBox(height: 12),
-                            SegmentedButton<String>(
-                              segments: const [
-                                ButtonSegment(
-                                  value: 'PICKUP',
-                                  icon: Icon(Icons.storefront_outlined),
-                                  label: Text('Tại cửa hàng'),
+                            if (widget.allowDelivery) ...[
+                              SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'PICKUP',
+                                    icon: Icon(Icons.storefront_outlined),
+                                    label: Text('Nhận tại cửa hàng'),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'DELIVERY',
+                                    icon: Icon(Icons.local_shipping_outlined),
+                                    label: Text('Giao tận nơi'),
+                                  ),
+                                ],
+                                selected: {_fulfillmentType},
+                                onSelectionChanged: (selection) {
+                                  setState(() {
+                                    _fulfillmentType = selection.first;
+                                  });
+                                },
+                              ),
+                            ] else ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
                                 ),
-                                ButtonSegment(
-                                  value: 'DELIVERY',
-                                  icon: Icon(Icons.local_shipping_outlined),
-                                  label: Text('Giao tận nơi'),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppColors.primary.withValues(alpha: 0.25),
+                                  ),
                                 ),
-                              ],
-                              selected: {_fulfillmentType},
-                              onSelectionChanged: (selection) {
-                                setState(() {
-                                  _fulfillmentType = selection.first;
-                                });
-                              },
-                            ),
+                                child: const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.storefront_outlined,
+                                      color: AppColors.primary,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Nhận tại cửa hàng',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      color: AppColors.primary,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             if (_fulfillmentType == 'DELIVERY') ...[
                               const SizedBox(height: 16),
                               InkWell(

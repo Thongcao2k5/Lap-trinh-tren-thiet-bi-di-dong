@@ -8,7 +8,7 @@ class ApiConfig {
   /// Địa chỉ IP máy tính cá nhân trong mạng LAN sử dụng cho thiết bị thật (Android/iOS)
   static const String pcIp = String.fromEnvironment(
     'PC_IP',
-    defaultValue: '172.16.0.209',
+    defaultValue: '192.168.1.140',
   );
 
   static String get defaultBaseUrl {
@@ -26,7 +26,7 @@ class ApiConfig {
     }
 
     try {
-      if (Platform.isAndroid) return 'http://10.0.2.2:3000/api';
+      if (Platform.isAndroid) return 'http://$pcIp:3000/api';
       if (Platform.isIOS) return 'http://localhost:3000/api';
     } catch (_) {
       // Platform check fails on web if dart:io is used, nhưng kIsWeb đã xử lý trước đó
